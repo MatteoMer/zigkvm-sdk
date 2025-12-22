@@ -1,0 +1,16 @@
+.{
+    .name = .double_input,
+    .version = "0.0.0",
+    .fingerprint = 0x4c40bd4629aa41e7,
+    .minimum_zig_version = "0.15.2",
+    .dependencies = .{
+        .zkvm = .{
+            .path = "../..",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
