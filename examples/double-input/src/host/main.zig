@@ -63,3 +63,40 @@ test "double-input host can read outputs" {
     try std.testing.expectEqual(@as(u32, 2), output.count());
     try std.testing.expectEqual(@as(u64, 84), output.readU64(0));
 }
+
+test "reading outputs from zkVM proof (example)" {
+    const allocator = std.testing.allocator;
+
+    // This test demonstrates how to read outputs from a zkVM execution.
+    // After running `zig build prove`, the output.bin file contains the results.
+
+    // Try to read outputs if the file exists (from a previous proof)
+    const output_file = std.fs.cwd().openFile("proofs/output.bin", .{}) catch {
+        std.debug.print("\n--- Output Reading Example ---\n", .{});
+        std.debug.print("No proofs/output.bin found (run `zig build prove` first)\n", .{});
+        std.debug.print("\nExample code to read outputs:\n\n", .{});
+        std.debug.print("  var output = try host.Output.fromFile(allocator, \"proofs/output.bin\");\n", .{});
+        std.debug.print("  defer output.deinit();\n\n", .{});
+        std.debug.print("  const result = output.readU64(0);\n", .{});
+        std.debug.print("  std.debug.print(\"Result: {{d}}\\n\", .{{result}});\n", .{});
+        return;
+    };
+    defer output_file.close();
+
+    std.debug.print("\n--- Reading zkVM Outputs ---\n", .{});
+
+    var output = try host.Output.fromFile(allocator, "proofs/output.bin");
+    defer output.deinit();
+
+    std.debug.print("Output count: {d}\n", .{output.count()});
+
+    if (output.count() >= 2) {
+        const result = output.readU64(0);
+        std.debug.print("Result (u64 at slot 0): {d}\n", .{result});
+    }
+
+    std.debug.print("\nAll output slots:\n", .{});
+    for (output.slice(), 0..) |value, i| {
+        std.debug.print("  slot[{d}] = {d} (0x{x:0>8})\n", .{ i, value, value });
+    }
+}

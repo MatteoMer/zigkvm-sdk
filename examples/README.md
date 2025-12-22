@@ -7,24 +7,36 @@ Small standalone Zig projects that depend on `zigkvm-sdk`.
 - `double-input` - reads a `u64` input and writes `input * 2` as output.
 - `bytes-sum` - reads input bytes, copies them with the SDK allocator, then outputs a checksum and length.
 
-## Build
+## Build & Run
 
 From each example directory:
 
 ```bash
+# Build for native testing
 zig build -Dbackend=native
+
+# Build for zkVM
 zig build -Dbackend=zisk -Doptimize=ReleaseSmall
+
+# Generate input file
+zig build run-host
+
+# Generate ZK proof (includes input generation)
+zig build -Dbackend=zisk prove
+
+# Verify proof
+zig build -Dbackend=zisk verify
 ```
 
 ## Native input harness
 
-The native backend does not read stdin; it expects input data to be set in memory. For quick checks, you can add a small test harness like this in the example's `src/main.zig`:
+The native backend does not read stdin; it expects input data to be set in memory. For quick checks, you can add a small test harness like this in the example's `src/guest/main.zig`:
 
 ```zig
 test "native harness" {
-    if (!@hasDecl(zkvm, "setInputData")) return;
+    if (!@hasDecl(zigkvm, "setInputData")) return;
     var input: u64 = 21;
-    zkvm.setInputData(std.mem.asBytes(&input));
+    zigkvm.setInputData(std.mem.asBytes(&input));
     main();
 }
 ```
