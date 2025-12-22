@@ -1,14 +1,14 @@
-const zkvm = @import("zkvm");
+const zigkvm = @import("zigkvm");
 
 comptime {
-    zkvm.exportEntryPoint(main);
+    zigkvm.exportEntryPoint(main);
 }
 
-pub const panic = zkvm.panic;
+pub const panic = zigkvm.panic;
 
 pub fn main() void {
-    const input = zkvm.readInput(u64);
+    const input = zigkvm.readInput(u64);
     const result = input * 2;
 
-    zkvm.setOutputU64(0, result);
+    zigkvm.setOutputU64(0, result);
 }

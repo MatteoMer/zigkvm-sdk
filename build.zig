@@ -34,7 +34,7 @@ pub fn build(b: *std.Build) void {
 
     // Create the library module (for use as a dependency)
     // Select backend file directly as module root - no re-export wrapper needed
-    const zkvm_module = b.addModule("zkvm", .{
+    const zigkvm_module = b.addModule("zigkvm", .{
         .root_source_file = switch (backend) {
             .zisk => b.path("src/backends/zisk.zig"),
             .native => b.path("src/backends/native.zig"),
@@ -47,15 +47,15 @@ pub fn build(b: *std.Build) void {
     });
 
     if (backend == .zisk) {
-        zkvm_module.code_model = .medium;
-        zkvm_module.red_zone = false;
-        zkvm_module.stack_protector = false;
-        zkvm_module.single_threaded = true;
+        zigkvm_module.code_model = .medium;
+        zigkvm_module.red_zone = false;
+        zigkvm_module.stack_protector = false;
+        zigkvm_module.single_threaded = true;
     }
 
     // Host utilities module (always runs on host machine, not in zkVM)
     // Used for preparing inputs, running tests, etc.
-    _ = b.addModule("zkvm_host", .{
+    _ = b.addModule("zigkvm_host", .{
         .root_source_file = b.path("src/host.zig"),
         .target = native_target, // Always target host machine
         .optimize = optimize,

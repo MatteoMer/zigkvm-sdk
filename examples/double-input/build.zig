@@ -10,7 +10,7 @@ pub fn build(b: *std.Build) void {
     const native_target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const zkvm_dep = b.dependency("zkvm", .{
+    const zigkvm_dep = b.dependency("zigkvm", .{
         .backend = backend,
         .target = native_target,
         .optimize = optimize,
@@ -43,7 +43,7 @@ pub fn build(b: *std.Build) void {
     }
 
     const guest_module = b.createModule(guest_module_options);
-    guest_module.addImport("zkvm", zkvm_dep.module("zkvm"));
+    guest_module.addImport("zigkvm", zigkvm_dep.module("zigkvm"));
 
     const guest_exe = b.addExecutable(.{
         .name = "double-input-guest",
@@ -51,7 +51,7 @@ pub fn build(b: *std.Build) void {
     });
 
     if (backend == .zisk) {
-        guest_exe.setLinkerScript(zkvm_dep.path("src/zisk.ld"));
+        guest_exe.setLinkerScript(zigkvm_dep.path("src/zisk.ld"));
     }
 
     b.installArtifact(guest_exe);
@@ -64,7 +64,7 @@ pub fn build(b: *std.Build) void {
         .target = native_target,
         .optimize = optimize,
     });
-    host_module.addImport("zkvm_host", zkvm_dep.module("zkvm_host"));
+    host_module.addImport("zigkvm_host", zigkvm_dep.module("zigkvm_host"));
 
     const host_exe = b.addExecutable(.{
         .name = "double-input-host",
@@ -93,7 +93,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    host_tests.root_module.addImport("zkvm_host", zkvm_dep.module("zkvm_host"));
+    host_tests.root_module.addImport("zigkvm_host", zigkvm_dep.module("zigkvm_host"));
 
     const run_host_tests = b.addRunArtifact(host_tests);
     const test_step = b.step("test", "Run tests");

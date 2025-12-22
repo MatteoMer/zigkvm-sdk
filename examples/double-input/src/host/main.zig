@@ -1,5 +1,5 @@
 const std = @import("std");
-const host = @import("zkvm_host");
+const host = @import("zigkvm_host");
 
 /// Host program for the double-input example.
 /// Prepares input for the guest program.

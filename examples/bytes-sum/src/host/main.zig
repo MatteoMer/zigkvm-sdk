@@ -1,5 +1,5 @@
 const std = @import("std");
-const host = @import("zkvm_host");
+const host = @import("zigkvm_host");
 
 /// Host program for the bytes-sum example.
 /// Prepares input bytes for the guest program to sum.

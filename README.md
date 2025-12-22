@@ -41,17 +41,17 @@ This SDK uses a **host/guest** split common in zkVM development:
 Write your zkVM program using the guest API:
 
 ```zig
-const zkvm = @import("zkvm");
+const zigkvm = @import("zigkvm");
 
 comptime {
-    zkvm.exportEntryPoint(main);
+    zigkvm.exportEntryPoint(main);
 }
 
-pub const panic = zkvm.panic;
+pub const panic = zigkvm.panic;
 
 pub fn main() void {
-    const input = zkvm.readInput(u64);
-    zkvm.setOutputU64(0, input * 2);
+    const input = zigkvm.readInput(u64);
+    zigkvm.setOutputU64(0, input * 2);
 }
 ```
 
@@ -60,7 +60,7 @@ pub fn main() void {
 Prepare inputs and read outputs from the host:
 
 ```zig
-const host = @import("zkvm_host");
+const host = @import("zigkvm_host");
 
 pub fn main() !void {
     var input = host.Input.init(allocator);
@@ -89,18 +89,9 @@ zig build -Dbackend=zisk verify
 
 ## Installation
 
-Add to your `build.zig.zon`:
+Check the [GitHub repository](https://github.com/MatteoMer/zigkvm-sdk) for the latest release and installation instructions.
 
-```zig
-.dependencies = .{
-    .zkvm = .{
-        .url = "https://github.com/MatteoMer/zigkvm-sdk/archive/<commit>.tar.gz",
-        .hash = "...",
-    },
-},
-```
-
-See [`examples/`](examples/) for complete project setup including `build.zig` configuration.
+See [`examples/`](examples/) for complete project setup with `build.zig` and `build.zig.zon` configuration.
 
 ## API Overview
 

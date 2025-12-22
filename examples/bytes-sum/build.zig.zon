@@ -4,7 +4,7 @@
     .fingerprint = 0x7d7d9e526c130db9,
     .minimum_zig_version = "0.15.2",
     .dependencies = .{
-        .zkvm = .{
+        .zigkvm = .{
             .path = "../..",
         },
     },

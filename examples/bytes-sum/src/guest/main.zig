@@ -1,15 +1,15 @@
 const std = @import("std");
-const zkvm = @import("zkvm");
+const zigkvm = @import("zigkvm");
 
 comptime {
-    zkvm.exportEntryPoint(main);
+    zigkvm.exportEntryPoint(main);
 }
 
-pub const panic = zkvm.panic;
+pub const panic = zigkvm.panic;
 
 pub fn main() void {
-    const input = zkvm.readInputSlice();
-    const allocator = zkvm.allocator();
+    const input = zigkvm.readInputSlice();
+    const allocator = zigkvm.allocator();
 
     const copy = allocator.alloc(u8, input.len) catch @panic("allocation failed");
     defer allocator.free(copy);
@@ -20,6 +20,6 @@ pub fn main() void {
         sum += byte;
     }
 
-    zkvm.setOutputU64(0, sum);
-    zkvm.setOutput(2, @intCast(copy.len));
+    zigkvm.setOutputU64(0, sum);
+    zigkvm.setOutput(2, @intCast(copy.len));
 }
