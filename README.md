@@ -34,7 +34,9 @@ This SDK uses a **host/guest** split common in zkVM development:
 ### Requirements
 
 - Zig 0.13.0 or later
-- For ZK proofs: [cargo-zisk](https://github.com/0xPolygonHermez/zisk) toolchain (more backends on the way!)
+- A ZK backend:
+    - [ZisK](https://github.com/0xPolygonHermez/zisk) 0.15
+    - (more backends on the way!)
 
 ### Guest Program
 

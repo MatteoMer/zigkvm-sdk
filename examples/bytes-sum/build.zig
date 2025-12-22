@@ -143,7 +143,7 @@ pub fn build(b: *std.Build) void {
         // ============================================================
         const verify_step = b.step("verify", "Verify ZK proof with cargo-zisk");
 
-        const proof_path = b.option([]const u8, "proof", "Path to proof file") orelse "proofs/vadcop_final_proof.compressed.bin";
+        const proof_path = b.option([]const u8, "proof", "Path to proof file") orelse "proofs/vadcop_final_proof.bin";
 
         const cargo_verify = b.addSystemCommand(&[_][]const u8{
             "cargo-zisk",
