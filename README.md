@@ -1,11 +1,91 @@
 # zigkvm-sdk
 
-A Zig SDK that allows your code to run in a zkVM (zero-knowledge virtual machine).
+> Build zero-knowledge applications in Zig
 
-## Supported Backends
+**zigkvm-sdk** is a lightweight, ergonomic SDK for writing zkVM programs in Zig. Write once, test locally, and generate ZK proofs without changing your code.
 
-- **zisk** - ZisK zkVM (RISC-V based)
-- **native** - Native execution for testing and development
+**New to ZK?** Read [Understanding Zero-Knowledge Proofs](#understanding-zero-knowledge-and-validity-proofs) first, or jump straight to the [Quick Start](#quick-start).
+
+## What's a Zero-Knowledge proof?
+Zero-knowledge proofs (ZKPs) let you prove that a computation was executed correctly without revealing the underlying inputs or execution details. In a zkVM, this means you can prove that a program ran and produced a specific output, while optionally keeping its data private.
+
+In practice, there are two related proof types:
+
+- **Validity proofs** prove correct execution with a small, fast-to-verify proof, but may reveal inputs or execution details.
+
+- **Zero-knowledge proofs** additionally guarantee privacy, hiding inputs and intermediate state.
+
+Most zkVMs today (including the default [ZisK](https://github.com/0xPolygonHermez/zisk) backend) produce validity proofs, not full zero-knowledge proofs.
+
+I will soon add support for the [Ligero](https://github.com/ligeroinc/ligero-prover) backend, enabling true zero-knowledge guarantees and privacy-preserving applications.
+
+## Quick Start
+
+### Host vs Guest Architecture
+
+This SDK uses a **host/guest** split common in zkVM development:
+
+- **Guest programs** run inside the zkVM in a sandboxed RISC-V environment. They execute your computation logic, and the zkVM produces a cryptographic proof that the execution was correct. Guests are restricted (no file I/O, no network, minimal syscalls) to keep execution deterministic and provable.
+
+- **Host programs** run normally on your machine with full system access. They prepare inputs for the guest, invoke the zkVM to generate proofs, and read the guest's outputs. The host handles everything the guest cannot: file operations, network requests, user interaction, etc.
+
+**Typical workflow:** Host prepares inputs → Guest executes computation inside zkVM → zkVM generates proof → Anyone can verify the proof to trust the output → Computation is verified without re-execution.
+
+### Requirements
+
+- Zig 0.13.0 or later
+- For ZK proofs: [cargo-zisk](https://github.com/0xPolygonHermez/zisk) toolchain (more backends on the way!)
+
+### Guest Program
+
+Write your zkVM program using the guest API:
+
+```zig
+const zkvm = @import("zkvm");
+
+comptime {
+    zkvm.exportEntryPoint(main);
+}
+
+pub const panic = zkvm.panic;
+
+pub fn main() void {
+    const input = zkvm.readInput(u64);
+    zkvm.setOutputU64(0, input * 2);
+}
+```
+
+### Host Program
+
+Prepare inputs and read outputs from the host:
+
+```zig
+const host = @import("zkvm_host");
+
+pub fn main() !void {
+    var input = host.Input.init(allocator);
+    defer input.deinit();
+
+    try input.write(@as(u64, 42));
+    try input.toFile("input.bin");
+}
+```
+
+### Build & Prove
+
+```bash
+# Test locally (fast)
+zig build -Dbackend=native test
+
+# Build for zkVM
+zig build -Dbackend=zisk
+
+# Generate proof
+zig build -Dbackend=zisk prove
+
+# Verify proof
+zig build -Dbackend=zisk verify
+```
 
 ## Installation
 
@@ -20,158 +100,45 @@ Add to your `build.zig.zon`:
 },
 ```
 
-Then in your `build.zig`:
+See [`examples/`](examples/) for complete project setup including `build.zig` configuration.
 
-```zig
-const zkvm_dep = b.dependency("zkvm", .{
-    .backend = .zisk,  // or .native for testing
-    .target = target,
-    .optimize = optimize,
-});
+## API Overview
 
-exe.root_module.addImport("zkvm", zkvm_dep.module("zkvm"));
+### Guest API
 
-// For zisk backend, also set the linker script
-if (backend == .zisk) {
-    exe.setLinkerScript(zkvm_dep.path("src/zisk.ld"));
-}
-```
+**Input/Output**
+- `readInput(T)` / `readInputSlice()` - Read typed data or bytes
+- `setOutput(id, value)` / `setOutputU64(id, value)` - Write results to output slots
+- `commit(id, value)` - Alias for `setOutput` (proof outputs)
 
-## Usage
+**Memory**
+- `allocator()` - Get heap allocator (bump allocator for zisk, GPA for native)
+- `BumpAllocator` - Simple bump allocator for zkVM
 
-```zig
-const zkvm = @import("zkvm");
+**Control**
+- `exportEntryPoint(fn)` - Export entry point for zkVM
+- `exit(code)` / `exitSuccess()` / `exitError()` - Exit with status
+- `isZkVM()` - Detect if running in zkVM or native
+- `panic` - Panic handler
 
-// Export entry point (required for zkVM execution)
-comptime {
-    zkvm.exportEntryPoint(main);
-}
+### Host API
 
-// Use the SDK's panic handler
-pub const panic = zkvm.panic;
+**Input Preparation**
+- `Input.init(allocator)` - Create input builder
+- `input.write(value)` - Write typed value
+- `input.toFile(path)` - Save to file for zkVM
 
-fn main() void {
-    // Read input
-    const input = zkvm.readInput(u64);
-
-    // Process
-    const result = input * 2;
-
-    // Write output
-    zkvm.setOutputU64(0, result);
-}
-```
-
-## Host Utilities
-
-The SDK includes host-side utilities for preparing inputs and reading outputs:
-
-```zig
-const host = @import("zkvm_host");
-
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    // Prepare input for guest program
-    var input = host.Input.init(allocator);
-    defer input.deinit();
-
-    try input.write(@as(u64, 42));
-    try input.toFile("input.bin");
-
-    // Read output from guest program
-    var output = try host.Output.fromFile(allocator, "output.bin");
-    defer output.deinit();
-
-    const result = output.readU64(0);
-}
-```
-
-In your `build.zig`, add the host module:
-
-```zig
-host_module.addImport("zkvm_host", zkvm_dep.module("zkvm_host"));
-```
+**Output Reading**
+- `Output.fromFile(allocator, path)` - Load outputs from file
+- `output.read(id)` / `output.readU64(id)` - Read output values
+- `output.slice()` - Get all outputs as slice
 
 ## Examples
 
-See the `examples/` directory for complete working examples:
+Check out [`examples/`](examples/) for complete working projects:
 
-- **double-input** - Reads a u64 and outputs double the value
-- **bytes-sum** - Reads bytes, copies them, and outputs a checksum
+- **[double-input](examples/double-input)** - Simple u64 doubling with proofs
+- **[bytes-sum](examples/bytes-sum)** - Byte processing with allocator usage
 
-Each example includes both guest and host programs. From an example directory:
+Each example includes guest program, host utilities, and proof generation.
 
-```bash
-# Build for zisk
-zig build -Dbackend=zisk -Doptimize=ReleaseSmall
-
-# Generate input and create a proof
-zig build -Dbackend=zisk prove
-
-# Verify the proof
-zig build -Dbackend=zisk verify
-```
-
-## API Reference
-
-### Input Functions
-
-| Function | Description |
-|----------|-------------|
-| `readInput(T) T` | Read input as typed value |
-| `readInputSlice() []const u8` | Read input as byte slice |
-| `readInputAt(T, offset) T` | Read typed value at offset |
-| `readInputSize() u64` | Get input size in bytes |
-
-### Output Functions
-
-| Function | Description |
-|----------|-------------|
-| `setOutput(id, value)` | Set u32 output at slot (0-63) |
-| `setOutputU64(id, value)` | Set u64 using two slots |
-| `getOutput(id) u32` | Get u32 output value |
-| `getOutputU64(id) u64` | Get u64 from two slots |
-| `commit(id, value)` | Alias for setOutput |
-
-### Control Functions
-
-| Function | Description |
-|----------|-------------|
-| `exit(code)` | Exit with status code |
-| `exitSuccess()` | Exit with code 0 |
-| `exitError()` | Exit with code 1 |
-| `isZkVM() bool` | Check if running in zkVM |
-
-### Memory
-
-| Function | Description |
-|----------|-------------|
-| `allocator()` | Get heap allocator |
-| `BumpAllocator` | Simple bump allocator type |
-
-### Entry Point
-
-| Function | Description |
-|----------|-------------|
-| `exportEntryPoint(fn)` | Export main as zkVM entry |
-| `panic` | Panic handler for zkVM |
-
-## Building
-
-```bash
-# Build for zisk zkVM
-zig build -Dbackend=zisk -Doptimize=ReleaseSmall
-
-# Build for native testing
-zig build -Dbackend=native
-
-# Run tests
-zig build test
-```
-
-## License
-
-MIT
