@@ -380,8 +380,8 @@ pub fn exportEntryPoint(comptime mainFn: MainFn) void {
 
         export fn _start() linksection(".text.init") callconv(.naked) noreturn {
             asm volatile (
-                // Set up stack pointer
-                \\li sp, 0xa0130000
+                // Set up stack pointer (use linker-defined symbol)
+                \\la sp, _init_stack_top
                 \\
                 // Clear BSS
                 \\la t0, _bss_start
