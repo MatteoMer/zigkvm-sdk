@@ -6,6 +6,7 @@ Small standalone Zig projects that depend on `zigkvm-sdk`.
 
 - `double-input` - reads a `u64` input and writes `input * 2` as output.
 - `bytes-sum` - reads input bytes, copies them with the SDK allocator, then outputs a checksum and length.
+- `private-input-example` - uses Ligero public/private inputs to prove a secret-derived value.
 
 ## Build & Run
 
@@ -15,8 +16,11 @@ From each example directory:
 # Build for native testing
 zig build -Dbackend=native
 
-# Build for zkVM
+# Build for ZisK zkVM
 zig build -Dbackend=zisk -Doptimize=ReleaseSmall
+
+# Build for Ligero zkVM
+zig build -Dbackend=ligero -Doptimize=ReleaseSmall
 
 # Generate input file
 zig build run-host

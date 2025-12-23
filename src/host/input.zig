@@ -5,11 +5,13 @@ const Backend = build_options.Backend;
 // Backend-specific encoders
 const native_encoder = @import("native.zig");
 const zisk_encoder = @import("zisk.zig");
+const ligero_encoder = @import("ligero.zig");
 
 /// Select encoder based on configured backend
 const Encoder = switch (build_options.backend) {
     .native => native_encoder.Encoder,
     .zisk => zisk_encoder.Encoder,
+    .ligero => ligero_encoder.Encoder,
 };
 
 /// Host-side input preparation for zkVM programs.
@@ -60,6 +62,38 @@ pub const Input = struct {
         return self.encoder.writeBytes(bytes);
     }
 
+    /// Write a typed value to public inputs (Ligero only)
+    pub fn writePublic(self: *Self, value: anytype) !void {
+        if (build_options.backend != .ligero) {
+            @compileError("writePublic is only supported by the Ligero backend");
+        }
+        return self.encoder.writePublic(value);
+    }
+
+    /// Write raw bytes to public inputs (Ligero only)
+    pub fn writePublicBytes(self: *Self, bytes: []const u8) !void {
+        if (build_options.backend != .ligero) {
+            @compileError("writePublicBytes is only supported by the Ligero backend");
+        }
+        return self.encoder.writePublicBytes(bytes);
+    }
+
+    /// Write a typed value to private inputs (Ligero only)
+    pub fn writePrivate(self: *Self, value: anytype) !void {
+        if (build_options.backend != .ligero) {
+            @compileError("writePrivate is only supported by the Ligero backend");
+        }
+        return self.encoder.writePrivate(value);
+    }
+
+    /// Write raw bytes to private inputs (Ligero only)
+    pub fn writePrivateBytes(self: *Self, bytes: []const u8) !void {
+        if (build_options.backend != .ligero) {
+            @compileError("writePrivateBytes is only supported by the Ligero backend");
+        }
+        return self.encoder.writePrivateBytes(bytes);
+    }
+
     /// Get the encoded input as bytes.
     /// The encoding format depends on the configured backend.
     /// Caller owns the returned slice and must free it.
@@ -80,6 +114,6 @@ pub const Input = struct {
 
     /// Get the current size of the input data (excluding any header)
     pub fn size(self: *const Self) usize {
-        return self.encoder.data.items.len;
+        return self.encoder.dataSize();
     }
 };

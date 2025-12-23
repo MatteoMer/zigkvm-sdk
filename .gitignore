@@ -4,3 +4,5 @@ zig-out/
 .DS_Store
 proofs
 *.bin
+*.gz
+ligero-config.json

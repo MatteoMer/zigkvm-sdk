@@ -6,11 +6,23 @@ pub const Backend = enum {
     zisk,
     /// Native backend for testing (default)
     native,
+    /// Ligero zkVM backend (WebGPU-based)
+    ligero,
+
+    pub fn fromString(str: ?[]const u8) Backend {
+        const s = str orelse return .native;
+        if (std.mem.eql(u8, s, "zisk")) return .zisk;
+        if (std.mem.eql(u8, s, "native")) return .native;
+        if (std.mem.eql(u8, s, "ligero")) return .ligero;
+        std.debug.print("Unknown backend: {s}. Valid options: native, zisk, ligero\n", .{s});
+        return .native;
+    }
 };
 
 pub fn build(b: *std.Build) void {
-    // Backend selection option
-    const backend = b.option(Backend, "backend", "zkVM backend to use (default: native)") orelse .native;
+    // Backend selection option (accepts string for easier dependency forwarding)
+    const backend_str = b.option([]const u8, "backend", "zkVM backend to use: native (default), zisk, ligero");
+    const backend = Backend.fromString(backend_str);
 
     // Standard options for native builds
     const native_target = b.standardTargetOptions(.{});
@@ -23,6 +35,11 @@ pub fn build(b: *std.Build) void {
             .os_tag = .freestanding,
             .abi = .none,
             .cpu_features_sub = std.Target.riscv.featureSet(&.{.c}),
+        }),
+        .ligero => b.resolveTargetQuery(.{
+            .cpu_arch = .wasm32,
+            .os_tag = .wasi,
+            .abi = .musl,
         }),
         .native => native_target,
     };
@@ -38,9 +55,10 @@ pub fn build(b: *std.Build) void {
         .root_source_file = switch (backend) {
             .zisk => b.path("src/backends/zisk.zig"),
             .native => b.path("src/backends/native.zig"),
+            .ligero => b.path("src/backends/ligero.zig"),
         },
         .target = target,
-        .optimize = if (backend == .zisk) .ReleaseSmall else optimize,
+        .optimize = if (backend == .zisk or backend == .ligero) .ReleaseSmall else optimize,
         .imports = &.{
             .{ .name = "build_options", .module = options_mod },
         },
@@ -51,6 +69,11 @@ pub fn build(b: *std.Build) void {
         zigkvm_module.red_zone = false;
         zigkvm_module.stack_protector = false;
         zigkvm_module.single_threaded = true;
+    }
+
+    if (backend == .ligero) {
+        zigkvm_module.single_threaded = true;
+        zigkvm_module.stack_check = false;
     }
 
     // Host utilities module (always runs on host machine, not in zkVM)

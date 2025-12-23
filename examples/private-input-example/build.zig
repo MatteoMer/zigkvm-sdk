@@ -1,8 +1,8 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    // Forward backend string to the SDK - it owns the Backend enum
-    const backend_str = b.option([]const u8, "backend", "zkVM backend: native (default), zisk, ligero");
+    // Default to Ligero since this example is Ligero-specific.
+    const backend_str = b.option([]const u8, "backend", "zkVM backend: ligero (default), native, zisk") orelse "ligero";
     const native_target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
@@ -15,7 +15,7 @@ pub fn build(b: *std.Build) void {
     // Parse backend locally for build logic (target selection, prove steps, etc.)
     const Backend = enum { zisk, native, ligero };
     const backend: Backend = blk: {
-        const s = backend_str orelse break :blk .native;
+        const s = backend_str;
         if (std.mem.eql(u8, s, "zisk")) break :blk .zisk;
         if (std.mem.eql(u8, s, "ligero")) break :blk .ligero;
         break :blk .native;
@@ -61,7 +61,7 @@ pub fn build(b: *std.Build) void {
     guest_module.addImport("zigkvm", zigkvm_dep.module("zigkvm"));
 
     const guest_exe = b.addExecutable(.{
-        .name = "bytes-sum-guest",
+        .name = "private-input-example-guest",
         .root_module = guest_module,
     });
 
@@ -82,7 +82,7 @@ pub fn build(b: *std.Build) void {
     host_module.addImport("zigkvm_host", zigkvm_dep.module("zigkvm_host"));
 
     const host_exe = b.addExecutable(.{
-        .name = "bytes-sum-host",
+        .name = "private-input-example-host",
         .root_module = host_module,
     });
 
@@ -140,7 +140,7 @@ pub fn build(b: *std.Build) void {
             "cargo-zisk",
             "prove",
             "--elf",
-            "zig-out/bin/bytes-sum-guest",
+            "zig-out/bin/private-input-example-guest",
             "--emulator",
             "--input",
             "input.bin",
@@ -206,7 +206,7 @@ pub fn build(b: *std.Build) void {
             "run",
             "../../scripts/ligero/create-ligero-config.zig",
             "--",
-            "zig-out/bin/bytes-sum-guest.wasm",
+            "zig-out/bin/private-input-example-guest.wasm",
             shader_path,
             "input.bin",
             "ligero-config.json",
