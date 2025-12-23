@@ -76,50 +76,52 @@ pub fn main() !void {
     var json_buf: std.ArrayListUnmanaged(u8) = .{};
     defer json_buf.deinit(allocator);
     const writer = json_buf.writer(allocator);
-
-    try writer.writeAll("{\n");
-    try writer.print("  \"program\": \"{s}\",\n", .{wasm_path});
-    try writer.print("  \"shader-path\": \"{s}\",\n", .{shader_path});
-    try writer.writeAll("  \"packing\": 8192,\n");
+    var json_stream: std.json.Stringify = .{
+        .writer = &writer,
+        .options = .{ .whitespace = .indent_2 },
+    };
 
     // Determine args and private-indices based on what data we have
     const has_public = public_len > 0;
     const has_private = private_len > 0;
 
+    try json_stream.beginObject();
+    try json_stream.objectField("program");
+    try json_stream.write(wasm_path);
+    try json_stream.objectField("shader-path");
+    try json_stream.write(shader_path);
+    try json_stream.objectField("packing");
+    try json_stream.write(@as(u32, 8192));
+    try json_stream.objectField("private-indices");
+    try json_stream.beginArray();
     if (has_public and has_private) {
         // Both public and private: argv[1] = public, argv[2] = private
-        try writer.writeAll("  \"private-indices\": [2],\n");
-        try writer.writeAll("  \"args\": [\n");
-        try writer.writeAll("    {\"hex\": \"");
-        try writeHex(writer, public_data);
-        try writer.writeAll("\"},\n");
-        try writer.writeAll("    {\"hex\": \"");
-        try writeHex(writer, private_data);
-        try writer.writeAll("\"}\n");
-        try writer.writeAll("  ]\n");
+        try json_stream.write(@as(u32, 2));
     } else if (has_private) {
         // Only private: argv[1] = private
-        try writer.writeAll("  \"private-indices\": [1],\n");
-        try writer.writeAll("  \"args\": [\n");
-        try writer.writeAll("    {\"hex\": \"");
-        try writeHex(writer, private_data);
-        try writer.writeAll("\"}\n");
-        try writer.writeAll("  ]\n");
-    } else if (has_public) {
-        // Only public: arg[0] = public, no private indices
-        try writer.writeAll("  \"private-indices\": [],\n");
-        try writer.writeAll("  \"args\": [\n");
-        try writer.writeAll("    {\"hex\": \"");
-        try writeHex(writer, public_data);
-        try writer.writeAll("\"}\n");
-        try writer.writeAll("  ]\n");
-    } else {
-        // No data at all
-        try writer.writeAll("  \"private-indices\": [],\n");
-        try writer.writeAll("  \"args\": []\n");
+        try json_stream.write(@as(u32, 1));
     }
-
-    try writer.writeAll("}\n");
+    try json_stream.endArray();
+    try json_stream.objectField("args");
+    try json_stream.beginArray();
+    if (has_public) {
+        const hex = try hexString(allocator, public_data);
+        defer allocator.free(hex);
+        try json_stream.beginObject();
+        try json_stream.objectField("hex");
+        try json_stream.write(hex);
+        try json_stream.endObject();
+    }
+    if (has_private) {
+        const hex = try hexString(allocator, private_data);
+        defer allocator.free(hex);
+        try json_stream.beginObject();
+        try json_stream.objectField("hex");
+        try json_stream.write(hex);
+        try json_stream.endObject();
+    }
+    try json_stream.endArray();
+    try json_stream.endObject();
 
     // Write to file
     const output_file = try std.fs.cwd().createFile(output_json_path, .{});
@@ -135,9 +137,15 @@ pub fn main() !void {
     }
 }
 
-fn writeHex(writer: anytype, data: []const u8) !void {
-    try writer.writeAll("0x");
-    for (data) |byte| {
-        try writer.print("{x:0>2}", .{byte});
+fn hexString(allocator: std.mem.Allocator, data: []const u8) ![]u8 {
+    const hex = "0123456789abcdef";
+    const out_len = 2 + data.len * 2;
+    const out = try allocator.alloc(u8, out_len);
+    out[0] = '0';
+    out[1] = 'x';
+    for (data, 0..) |byte, i| {
+        out[2 + i * 2] = hex[byte >> 4];
+        out[2 + i * 2 + 1] = hex[byte & 0x0f];
     }
+    return out;
 }

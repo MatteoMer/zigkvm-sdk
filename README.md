@@ -17,7 +17,7 @@ In practice, there are two related proof types:
 
 Most zkVMs today (including the default [ZisK](https://github.com/0xPolygonHermez/zisk) backend) produce validity proofs, not full zero-knowledge proofs.
 
-I will soon add support for the [Ligero](https://github.com/ligeroinc/ligero-prover) backend, enabling true zero-knowledge guarantees and privacy-preserving applications.
+If you need real zero-knowledge proofs you should use [Ligero](https://github.com/ligeroinc/ligero-prover) backend, and use the private inputs to achieve real privacy.
 
 ## Quick Start
 
@@ -36,7 +36,7 @@ This SDK uses a **host/guest** split common in zkVM development:
 - Zig 0.13.0 or later
 - A ZK backend:
     - [ZisK](https://github.com/0xPolygonHermez/zisk) 0.15
-    - (more backends on the way!)
+    - [Ligero](https://github.com/ligeroinc/ligero-prover?tab=readme-ov-file) v1.2.0 (see [scripts/ligero/README.md](scripts/ligero/README.md) if you need help)
 
 ### Guest Program
 
@@ -96,23 +96,6 @@ zig build -Dbackend=zisk verify
 Check the [GitHub repository](https://github.com/MatteoMer/zigkvm-sdk) for the latest release and installation instructions.
 
 See [`examples/`](examples/) for complete project setup with `build.zig` and `build.zig.zon` configuration.
-
-### Installing Ligero Backend (Optional)
-
-For true zero-knowledge proofs, install the Ligero prover:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/MatteoMer/zigkvm-sdk/main/scripts/ligero/install-ligero.sh | bash
-source ~/.zshrc  # or restart your terminal
-```
-
-Verify installation:
-
-```bash
-webgpu_prover --version
-```
-
-For manual installation or troubleshooting, see [`scripts/ligero/README.md`](scripts/ligero/README.md).
 
 ## API Overview
 

@@ -2,6 +2,8 @@
 
 This directory contains installation scripts for the [Ligero prover](https://github.com/ligeroinc/ligero-prover), which enables true zero-knowledge proofs for the zigkvm-sdk.
 
+Disclaimer: I've only used this script on my macbook M1 pro, have not tried the linux. Feel free to open issues if it's broken
+
 ## Quick Start
 
 ### One-Line Installation
@@ -14,12 +16,6 @@ After installation, restart your terminal or run:
 
 ```bash
 source ~/.zshrc  # or ~/.bashrc for bash users
-```
-
-### Verify Installation
-
-```bash
-webgpu_prover --version
 ```
 
 ## Supported Platforms
@@ -431,14 +427,7 @@ zig build -Dbackend=ligero prove
 zig build -Dbackend=ligero verify
 ```
 
-**Note:** Ligero backend integration is coming soon. For now, the installer prepares your system for when the backend is available.
-
 ## Support
 
 - **Ligero Issues**: https://github.com/ligeroinc/ligero-prover/issues
 - **zigkvm-sdk Issues**: https://github.com/MatteoMer/zigkvm-sdk/issues
-- **Installation Script Issues**: https://github.com/MatteoMer/zigkvm-sdk/issues
-
-## License
-
-The installation scripts in this directory are part of zigkvm-sdk. The Ligero prover itself is licensed under Apache 2.0.
