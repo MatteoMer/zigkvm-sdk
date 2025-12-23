@@ -5,11 +5,13 @@ const Backend = build_options.Backend;
 // Backend-specific decoders
 const native_decoder = @import("output_native.zig");
 const zisk_decoder = @import("output_zisk.zig");
+const ligero_decoder = @import("output_ligero.zig");
 
 /// Select decoder based on configured backend
 const Decoder = switch (build_options.backend) {
     .native => native_decoder.Decoder,
     .zisk => zisk_decoder.Decoder,
+    .ligero => ligero_decoder.Decoder,
 };
 
 /// Host-side output reading for zkVM programs.

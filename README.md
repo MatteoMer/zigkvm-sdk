@@ -91,9 +91,28 @@ zig build -Dbackend=zisk verify
 
 ## Installation
 
+### Installing the SDK
+
 Check the [GitHub repository](https://github.com/MatteoMer/zigkvm-sdk) for the latest release and installation instructions.
 
 See [`examples/`](examples/) for complete project setup with `build.zig` and `build.zig.zon` configuration.
+
+### Installing Ligero Backend (Optional)
+
+For true zero-knowledge proofs, install the Ligero prover:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MatteoMer/zigkvm-sdk/main/scripts/ligero/install-ligero.sh | bash
+source ~/.zshrc  # or restart your terminal
+```
+
+Verify installation:
+
+```bash
+webgpu_prover --version
+```
+
+For manual installation or troubleshooting, see [`scripts/ligero/README.md`](scripts/ligero/README.md).
 
 ## API Overview
 
@@ -119,6 +138,7 @@ See [`examples/`](examples/) for complete project setup with `build.zig` and `bu
 **Input Preparation**
 - `Input.init(allocator)` - Create input builder
 - `input.write(value)` - Write typed value
+- `input.writePublic(...)` / `input.writePrivate(...)` - Ligero-only public/private inputs (compile-time error on other backends)
 - `input.toFile(path)` - Save to file for zkVM
 
 **Output Reading**
@@ -134,4 +154,3 @@ Check out [`examples/`](examples/) for complete working projects:
 - **[bytes-sum](examples/bytes-sum)** - Byte processing with allocator usage
 
 Each example includes guest program, host utilities, and proof generation.
-

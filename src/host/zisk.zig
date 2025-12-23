@@ -73,6 +73,11 @@ pub const Encoder = struct {
         try self.data.appendSlice(self.allocator, bytes);
     }
 
+    /// Get current data size (for Input.size() compatibility)
+    pub fn dataSize(self: *const Self) usize {
+        return self.data.items.len;
+    }
+
     /// Get the encoded bytes with ZisK header
     /// Format: 8 bytes reserved (zeros) + 8 bytes size (little-endian u64) + data
     pub fn toBytes(self: *Self) ![]const u8 {

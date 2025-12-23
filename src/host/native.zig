@@ -65,6 +65,11 @@ pub const Encoder = struct {
         try self.data.appendSlice(self.allocator, bytes);
     }
 
+    /// Get current data size (for Input.size() compatibility)
+    pub fn dataSize(self: *const Self) usize {
+        return self.data.items.len;
+    }
+
     /// Get the encoded bytes (native: no header, just raw data)
     pub fn toBytes(self: *Self) ![]const u8 {
         const result = try self.allocator.alloc(u8, self.data.items.len);
