@@ -124,6 +124,20 @@ See [`examples/`](examples/) for complete project setup with `build.zig` and `bu
 - `input.writePublic(...)` / `input.writePrivate(...)` - Ligero-only public/private inputs (compile-time error on other backends)
 - `input.toFile(path)` - Save to file for zkVM
 
+**Ligero private inputs (host + guest)**
+```zig
+// Host: encode public + private inputs (Ligero only)
+var input = host.Input.init(allocator);
+defer input.deinit();
+try input.writePublic(@as(u64, expected));
+try input.writePrivate(@as(u64, secret));
+try input.toFile("input.bin");
+
+// Guest: read public + private inputs (Ligero only)
+const expected = zigkvm.readPublicInput(u64);
+const secret = zigkvm.readPrivateInput(u64);
+```
+
 **Output Reading**
 - `Output.fromFile(allocator, path)` - Load outputs from file
 - `output.read(id)` / `output.readU64(id)` - Read output values
@@ -135,5 +149,6 @@ Check out [`examples/`](examples/) for complete working projects:
 
 - **[double-input](examples/double-input)** - Simple u64 doubling with proofs
 - **[bytes-sum](examples/bytes-sum)** - Byte processing with allocator usage
+- **[private-input-example](examples/private-input-example)** - Ligero public/private input encoding
 
 Each example includes guest program, host utilities, and proof generation.

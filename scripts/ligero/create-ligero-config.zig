@@ -73,11 +73,10 @@ pub fn main() !void {
     const private_data = input_data[private_len_offset + 8 ..][0..private_len];
 
     // Create JSON - build in memory then write
-    var json_buf: std.ArrayListUnmanaged(u8) = .{};
-    defer json_buf.deinit(allocator);
-    const writer = json_buf.writer(allocator);
+    var out: std.io.Writer.Allocating = .init(allocator);
+    defer out.deinit();
     var json_stream: std.json.Stringify = .{
-        .writer = &writer,
+        .writer = &out.writer,
         .options = .{ .whitespace = .indent_2 },
     };
 
@@ -126,7 +125,7 @@ pub fn main() !void {
     // Write to file
     const output_file = try std.fs.cwd().createFile(output_json_path, .{});
     defer output_file.close();
-    try output_file.writeAll(json_buf.items);
+    try output_file.writeAll(out.written());
 
     std.debug.print("Created Ligero config: {s}\n", .{output_json_path});
     if (has_public) {
