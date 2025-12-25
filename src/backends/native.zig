@@ -267,9 +267,3 @@ test "native backend I/O" {
     try std.testing.expectEqual(false, isZkVM());
 }
 
-// =============================================================================
-// Precompiles
-// =============================================================================
-
-/// Cryptographic precompiles (software implementations for native testing)
-pub const precompiles = @import("precompiles");

@@ -49,15 +49,22 @@ pub fn build(b: *std.Build) void {
     options.addOption(Backend, "backend", backend);
     const options_mod = options.createModule();
 
-    // Create precompiles module (used by all backends)
-    const lib_precompiles_mod = b.createModule(.{
-        .root_source_file = b.path("src/precompiles.zig"),
+    // Create precompiles types module (shared across backends that support precompiles)
+    const precompiles_types_mod = b.createModule(.{
+        .root_source_file = b.path("src/precompiles/types.zig"),
         .target = target,
         .optimize = if (backend == .zisk or backend == .ligero) .ReleaseSmall else optimize,
-        .imports = &.{
-            .{ .name = "build_options", .module = options_mod },
-        },
     });
+
+    // Create precompiles module (only for ZisK backend)
+    const lib_precompiles_mod = if (backend == .zisk) b.createModule(.{
+        .root_source_file = b.path("src/precompiles/zisk.zig"),
+        .target = target,
+        .optimize = .ReleaseSmall,
+        .imports = &.{
+            .{ .name = "types.zig", .module = precompiles_types_mod },
+        },
+    }) else null;
 
     // Create the library module (for use as a dependency)
     // Select backend file directly as module root - no re-export wrapper needed
@@ -69,9 +76,11 @@ pub fn build(b: *std.Build) void {
         },
         .target = target,
         .optimize = if (backend == .zisk or backend == .ligero) .ReleaseSmall else optimize,
-        .imports = &.{
+        .imports = if (backend == .zisk) &.{
             .{ .name = "build_options", .module = options_mod },
-            .{ .name = "precompiles", .module = lib_precompiles_mod },
+            .{ .name = "precompiles", .module = lib_precompiles_mod.? },
+        } else &.{
+            .{ .name = "build_options", .module = options_mod },
         },
     });
 
@@ -103,23 +112,12 @@ pub fn build(b: *std.Build) void {
     test_options.addOption(Backend, "backend", .native);
     const test_options_mod = test_options.createModule();
 
-    // Create precompiles module for tests
-    const precompiles_mod = b.createModule(.{
-        .root_source_file = b.path("src/precompiles.zig"),
-        .target = native_target,
-        .optimize = optimize,
-        .imports = &.{
-            .{ .name = "build_options", .module = test_options_mod },
-        },
-    });
-
     const test_module = b.createModule(.{
         .root_source_file = b.path("src/backends/native.zig"),
         .target = native_target,
         .optimize = optimize,
         .imports = &.{
             .{ .name = "build_options", .module = test_options_mod },
-            .{ .name = "precompiles", .module = precompiles_mod },
         },
     });
 
@@ -186,21 +184,4 @@ pub fn build(b: *std.Build) void {
 
     const run_host_output_zisk_tests = b.addRunArtifact(host_output_zisk_tests);
     test_step.dependOn(&run_host_output_zisk_tests.step);
-
-    // Precompiles tests (native backend)
-    const precompiles_test_module = b.createModule(.{
-        .root_source_file = b.path("src/precompiles.zig"),
-        .target = native_target,
-        .optimize = optimize,
-        .imports = &.{
-            .{ .name = "build_options", .module = test_options_mod },
-        },
-    });
-
-    const precompiles_tests = b.addTest(.{
-        .root_module = precompiles_test_module,
-    });
-
-    const run_precompiles_tests = b.addRunArtifact(precompiles_tests);
-    test_step.dependOn(&run_precompiles_tests.step);
 }
