@@ -81,6 +81,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "precompiles", .module = lib_precompiles_mod.? },
         } else &.{
             .{ .name = "build_options", .module = options_mod },
+            .{ .name = "precompiles", .module = lib_precompiles_mod },
         },
     });
 
@@ -112,12 +113,23 @@ pub fn build(b: *std.Build) void {
     test_options.addOption(Backend, "backend", .native);
     const test_options_mod = test_options.createModule();
 
+    // Create precompiles module for tests
+    const precompiles_mod = b.createModule(.{
+        .root_source_file = b.path("src/precompiles.zig"),
+        .target = native_target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "build_options", .module = test_options_mod },
+        },
+    });
+
     const test_module = b.createModule(.{
         .root_source_file = b.path("src/backends/native.zig"),
         .target = native_target,
         .optimize = optimize,
         .imports = &.{
             .{ .name = "build_options", .module = test_options_mod },
+            .{ .name = "precompiles", .module = precompiles_mod },
         },
     });
 
@@ -184,4 +196,21 @@ pub fn build(b: *std.Build) void {
 
     const run_host_output_zisk_tests = b.addRunArtifact(host_output_zisk_tests);
     test_step.dependOn(&run_host_output_zisk_tests.step);
+
+    // Precompiles tests (native backend)
+    const precompiles_test_module = b.createModule(.{
+        .root_source_file = b.path("src/precompiles.zig"),
+        .target = native_target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "build_options", .module = test_options_mod },
+        },
+    });
+
+    const precompiles_tests = b.addTest(.{
+        .root_module = precompiles_test_module,
+    });
+
+    const run_precompiles_tests = b.addRunArtifact(precompiles_tests);
+    test_step.dependOn(&run_precompiles_tests.step);
 }
