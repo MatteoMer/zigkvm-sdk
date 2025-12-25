@@ -1,0 +1,16 @@
+.{
+    .name = .hash_no_precompile,
+    .version = "0.0.0",
+    .fingerprint = 0x6631b19d7f2ce06e,
+    .minimum_zig_version = "0.15.2",
+    .dependencies = .{
+        .zigkvm = .{
+            .path = "../..",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}

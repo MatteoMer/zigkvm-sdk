@@ -49,6 +49,23 @@ pub fn build(b: *std.Build) void {
     options.addOption(Backend, "backend", backend);
     const options_mod = options.createModule();
 
+    // Create precompiles types module (shared across backends that support precompiles)
+    const precompiles_types_mod = b.createModule(.{
+        .root_source_file = b.path("src/precompiles/types.zig"),
+        .target = target,
+        .optimize = if (backend == .zisk or backend == .ligero) .ReleaseSmall else optimize,
+    });
+
+    // Create precompiles module (only for ZisK backend)
+    const lib_precompiles_mod = if (backend == .zisk) b.createModule(.{
+        .root_source_file = b.path("src/precompiles/zisk.zig"),
+        .target = target,
+        .optimize = .ReleaseSmall,
+        .imports = &.{
+            .{ .name = "types.zig", .module = precompiles_types_mod },
+        },
+    }) else null;
+
     // Create the library module (for use as a dependency)
     // Select backend file directly as module root - no re-export wrapper needed
     const zigkvm_module = b.addModule("zigkvm", .{
@@ -59,7 +76,10 @@ pub fn build(b: *std.Build) void {
         },
         .target = target,
         .optimize = if (backend == .zisk or backend == .ligero) .ReleaseSmall else optimize,
-        .imports = &.{
+        .imports = if (backend == .zisk) &.{
+            .{ .name = "build_options", .module = options_mod },
+            .{ .name = "precompiles", .module = lib_precompiles_mod.? },
+        } else &.{
             .{ .name = "build_options", .module = options_mod },
         },
     });
