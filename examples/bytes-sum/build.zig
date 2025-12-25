@@ -167,6 +167,30 @@ pub fn build(b: *std.Build) void {
             proof_path,
         });
         verify_step.dependOn(&cargo_verify.step);
+
+        // ============================================================
+        // Emu: Run in ZisK emulator without proof generation
+        // ============================================================
+        const emu_step = b.step("emu", "Run guest in ZisK emulator");
+        emu_step.dependOn(b.getInstallStep());
+
+        // Generate input.bin by running the host
+        const gen_input_emu = b.addRunArtifact(host_exe);
+        gen_input_emu.step.dependOn(b.getInstallStep());
+        emu_step.dependOn(&gen_input_emu.step);
+
+        // Run ziskemu
+        const ziskemu = b.addSystemCommand(&[_][]const u8{
+            "ziskemu",
+            "-e",
+            "zig-out/bin/bytes-sum-guest",
+            "-i",
+            "input.bin",
+            "-c",
+            "-m",
+        });
+        ziskemu.step.dependOn(&gen_input_emu.step);
+        emu_step.dependOn(&ziskemu.step);
     }
 
     // ============================================================

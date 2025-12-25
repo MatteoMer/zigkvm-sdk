@@ -423,3 +423,10 @@ pub fn panic(msg: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
     setOutput(0, 0xDEAD);
     exit(1);
 }
+
+// =============================================================================
+// Precompiles
+// =============================================================================
+
+/// ZisK hardware-accelerated cryptographic precompiles
+pub const precompiles = @import("precompiles");
