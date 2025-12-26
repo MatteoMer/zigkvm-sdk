@@ -91,7 +91,6 @@ pub const ZisKProver = struct {
             "prove",
             "--elf",
             elf_path,
-            "--emulator",
             "--input",
             input_file,
             "--output-dir",
