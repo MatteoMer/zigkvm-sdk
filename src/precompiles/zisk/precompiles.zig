@@ -27,7 +27,7 @@
 //! | 0x811 | add256                  | 256-bit addition with carry              |
 
 const std = @import("std");
-const types = @import("../types.zig");
+const types = @import("types.zig");
 
 // Re-export types for convenience
 pub const U256 = types.U256;

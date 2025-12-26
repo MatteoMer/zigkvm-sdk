@@ -182,7 +182,7 @@ pub const OutputData = struct {
         };
     }
 
-    /// Load output from a file
+    /// Load output from a file (count + values format)
     pub fn fromFile(allocator: std.mem.Allocator, path: []const u8) !Self {
         const file = try std.fs.cwd().openFile(path, .{});
         defer file.close();
@@ -191,6 +191,44 @@ pub const OutputData = struct {
         defer allocator.free(bytes);
 
         return try fromBytes(allocator, bytes);
+    }
+
+    /// Parse raw output bytes (no count prefix, used by ziskemu)
+    /// File size / 4 = number of u32 values
+    pub fn fromRawBytes(allocator: std.mem.Allocator, bytes: []const u8) !Self {
+        if (bytes.len % 4 != 0) {
+            return error.InvalidOutputFormat;
+        }
+
+        const output_count: u32 = @intCast(bytes.len / 4);
+        if (output_count > MAX_OUTPUT_COUNT) {
+            return error.TooManyOutputs;
+        }
+
+        const values = try allocator.alloc(u32, output_count);
+        errdefer allocator.free(values);
+
+        for (0..output_count) |i| {
+            const offset = i * 4;
+            values[i] = std.mem.readInt(u32, bytes[offset..][0..4], .little);
+        }
+
+        return Self{
+            .allocator = allocator,
+            .values = values,
+            .count = output_count,
+        };
+    }
+
+    /// Load raw output from a file (no count prefix, used by ziskemu)
+    pub fn fromRawFile(allocator: std.mem.Allocator, path: []const u8) !Self {
+        const file = try std.fs.cwd().openFile(path, .{});
+        defer file.close();
+
+        const bytes = try file.readToEndAlloc(allocator, 1024 * 1024);
+        defer allocator.free(bytes);
+
+        return try fromRawBytes(allocator, bytes);
     }
 
     pub fn deinit(self: *Self) void {

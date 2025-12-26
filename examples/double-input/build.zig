@@ -72,14 +72,32 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(guest_exe);
 
     // ============================================================
-    // Host: Prepares inputs and runs on host machine
+    // Host: Executes guest using the runtime API
     // ============================================================
+
+    // Create build options for host (backend and guest path)
+    const RuntimeBackend = enum { zisk, ligero };
+    const options = b.addOptions();
+
+    // Map backend to runtime backend (runtime doesn't support native)
+    if (backend == .zisk) {
+        options.addOption(RuntimeBackend, "backend", .zisk);
+    } else if (backend == .ligero) {
+        options.addOption(RuntimeBackend, "backend", .ligero);
+    }
+
+    // Pass guest binary path - use the installed path
+    const guest_install_path = b.getInstallPath(.bin, guest_exe.out_filename);
+    options.addOption([]const u8, "guest_binary", guest_install_path);
+
     const host_module = b.createModule(.{
         .root_source_file = b.path("src/host/main.zig"),
         .target = native_target,
         .optimize = optimize,
     });
     host_module.addImport("zigkvm_host", zigkvm_dep.module("zigkvm_host"));
+    host_module.addImport("zigkvm_runtime", zigkvm_dep.module("zigkvm_runtime"));
+    host_module.addImport("build_options", options.createModule());
 
     const host_exe = b.addExecutable(.{
         .name = "double-input-host",
@@ -88,27 +106,35 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(host_exe);
 
-    // Run step for host (generates input.bin)
-    const run_host = b.addRunArtifact(host_exe);
-    run_host.step.dependOn(b.getInstallStep());
-    if (b.args) |args| {
-        run_host.addArgs(args);
-    }
+    // ============================================================
+    // Run: Execute guest using runtime (zisk/ligero only)
+    // ============================================================
+    if (backend == .zisk or backend == .ligero) {
+        const run_host = b.addRunArtifact(host_exe);
+        run_host.step.dependOn(b.getInstallStep());
+        if (b.args) |args| {
+            run_host.addArgs(args);
+        }
 
-    const run_step = b.step("run-host", "Run the host to generate input.bin");
-    run_step.dependOn(&run_host.step);
+        const run_step = b.step("run", "Execute guest program using runtime");
+        run_step.dependOn(&run_host.step);
+    }
 
     // ============================================================
     // Tests
     // ============================================================
-    const host_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/host/main.zig"),
-            .target = native_target,
-            .optimize = optimize,
-        }),
+    const test_module = b.createModule(.{
+        .root_source_file = b.path("src/host/main.zig"),
+        .target = native_target,
+        .optimize = optimize,
     });
-    host_tests.root_module.addImport("zigkvm_host", zigkvm_dep.module("zigkvm_host"));
+    test_module.addImport("zigkvm_host", zigkvm_dep.module("zigkvm_host"));
+    test_module.addImport("zigkvm_runtime", zigkvm_dep.module("zigkvm_runtime"));
+    test_module.addImport("build_options", options.createModule());
+
+    const host_tests = b.addTest(.{
+        .root_module = test_module,
+    });
 
     const run_host_tests = b.addRunArtifact(host_tests);
     const test_step = b.step("test", "Run tests");
@@ -167,22 +193,6 @@ pub fn build(b: *std.Build) void {
             proof_path,
         });
         verify_step.dependOn(&cargo_verify.step);
-
-        // ============================================================
-        // Emu: Run in ZisK emulator without proof generation
-        // ============================================================
-        const emu_step = b.step("emu", "Run guest in ZisK emulator");
-        emu_step.dependOn(b.getInstallStep());
-
-        // Generate input.bin by running the host
-        const gen_input_emu = b.addRunArtifact(host_exe);
-        gen_input_emu.step.dependOn(b.getInstallStep());
-        emu_step.dependOn(&gen_input_emu.step);
-
-        // Run ziskemu
-        const ziskemu = b.addSystemCommand(&[_][]const u8{ "ziskemu", "-e", "zig-out/bin/double-input-guest", "-i", "input.bin", "-c", "-m", "-X" });
-        ziskemu.step.dependOn(&gen_input_emu.step);
-        emu_step.dependOn(&ziskemu.step);
     }
 
     // ============================================================

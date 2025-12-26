@@ -1,11 +1,11 @@
 //! Hash Precompiles Example - Host Program
 //!
-//! This program prepares input for the hash precompiles example guest.
-//! It writes input data to input.bin which the guest will hash using
-//! the keccakF and sha256F precompiles.
+//! This program executes the hash precompiles example guest using the runtime API.
+//! It hashes data using the keccakF and sha256F precompiles.
 
 const std = @import("std");
-const host = @import("zigkvm_host");
+const runtime = @import("zigkvm_runtime");
+const build_options = @import("build_options");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -15,7 +15,21 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    var input = host.Input.init(allocator);
+    // Map build backend to runtime backend
+    const backend: runtime.Backend = switch (build_options.backend) {
+        .zisk => .zisk,
+        .ligero => .ligero,
+    };
+
+    // Initialize runtime with guest binary from build options
+    var rt = try runtime.Runtime.init(allocator, .{
+        .backend = backend,
+        .guest_binary = build_options.guest_binary,
+    });
+    defer rt.deinit();
+
+    // Prepare input using runtime API
+    var input = rt.createInput();
     defer input.deinit();
 
     if (args.len > 1) {
@@ -30,19 +44,47 @@ pub fn main() !void {
         std.debug.print("Using default input: \"{s}\"\n", .{default_input});
     }
 
+    std.debug.print("Input size: {d} bytes\n", .{input.size()});
+
+    // Also write input.bin for CLI tools compatibility (prove step)
     try input.toFile("input.bin");
 
-    std.debug.print("Generated input.bin with {d} bytes\n", .{input.size()});
-    std.debug.print("\nThis input will be processed by:\n", .{});
-    std.debug.print("  - Keccak-f[1600] permutation (outputs slots 0-7)\n", .{});
-    std.debug.print("  - SHA-256 extend/compress (outputs slots 8-15)\n", .{});
-    std.debug.print("  - Input length (output slot 16)\n", .{});
+    // Execute guest program
+    const private_bytes = try input.getPrivateBytes();
+    defer allocator.free(private_bytes);
+
+    var result = try rt.execute(null, private_bytes);
+    defer result.deinit();
+
+    // Display results
+    std.debug.print("\nExecution completed!\n", .{});
+    if (result.cycles) |cycles| {
+        std.debug.print("Cycles: {d}\n", .{cycles});
+    }
+
+    std.debug.print("Output count: {d}\n", .{result.output.count()});
+
+    if (result.output.count() >= 17) {
+        std.debug.print("\nKeccak output (slots 0-7):\n", .{});
+        for (0..8) |i| {
+            std.debug.print("  slot[{d}] = 0x{x:0>8}\n", .{ i, result.output.read(i) });
+        }
+
+        std.debug.print("\nSHA-256 output (slots 8-15):\n", .{});
+        for (8..16) |i| {
+            std.debug.print("  slot[{d}] = 0x{x:0>8}\n", .{ i, result.output.read(i) });
+        }
+
+        std.debug.print("\nInput length: {d}\n", .{result.output.read(16)});
+    }
 }
+
+const host = @import("zigkvm_host");
 
 test "hash-precompiles host prepares correct input" {
     const allocator = std.testing.allocator;
 
-    var input = host.Input.init(allocator);
+    var input = host.Input.initWithBackend(allocator, .zisk);
     defer input.deinit();
 
     try input.writeBytes("test message");

@@ -133,8 +133,8 @@ pub const ZisKExecutor = struct {
             };
         }
 
-        // Parse output file
-        const outputs = runtime.OutputData.fromFile(self.allocator, output_file) catch {
+        // Parse output file (ziskemu outputs raw u32 values without count prefix)
+        const outputs = runtime.OutputData.fromRawFile(self.allocator, output_file) catch {
             // Output file might not exist if guest didn't produce output
             return runtime.ExecutorResult{
                 .allocator = self.allocator,
