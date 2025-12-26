@@ -180,15 +180,7 @@ pub fn build(b: *std.Build) void {
         emu_step.dependOn(&gen_input_emu.step);
 
         // Run ziskemu
-        const ziskemu = b.addSystemCommand(&[_][]const u8{
-            "ziskemu",
-            "-e",
-            "zig-out/bin/bytes-sum-guest",
-            "-i",
-            "input.bin",
-            "-c",
-            "-m",
-        });
+        const ziskemu = b.addSystemCommand(&[_][]const u8{ "ziskemu", "-e", "zig-out/bin/bytes-sum-guest", "-i", "input.bin", "-c", "-m", "-X" });
         ziskemu.step.dependOn(&gen_input_emu.step);
         emu_step.dependOn(&ziskemu.step);
     }

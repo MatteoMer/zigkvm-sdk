@@ -1,47 +1,52 @@
 const std = @import("std");
-const build_options = @import("build_options");
-const Backend = build_options.Backend;
+const encoder_mod = @import("encoder.zig");
 
-// Backend-specific encoders
-const native_encoder = @import("native.zig");
-const zisk_encoder = @import("zisk.zig");
-const ligero_encoder = @import("ligero.zig");
-
-/// Select encoder based on configured backend
-const Encoder = switch (build_options.backend) {
-    .native => native_encoder.Encoder,
-    .zisk => zisk_encoder.Encoder,
-    .ligero => ligero_encoder.Encoder,
-};
+/// Re-export Backend for convenience
+pub const Backend = encoder_mod.Backend;
 
 /// Host-side input preparation for zkVM programs.
 /// Provides an ergonomic API for preparing inputs to send to guest programs.
 ///
-/// Usage:
+/// Supports both compile-time and runtime backend selection:
+///
+/// ## Compile-time backend (backward compatible)
 /// ```zig
 /// var input = Input.init(allocator);
 /// defer input.deinit();
-///
 /// try input.write(@as(u64, 42));
-/// try input.write(@as(u32, 100));
+/// ```
 ///
-/// // Write to file for zkVM CLI tools
-/// try input.toFile("input.bin");
-///
-/// // Or get bytes directly for testing
-/// const bytes = try input.toBytes();
+/// ## Runtime backend selection
+/// ```zig
+/// var input = Input.initWithBackend(allocator, .ligero);
+/// defer input.deinit();
+/// try input.writePublic(@as(u64, expected_hash));
+/// try input.writePrivate(@as(u64, secret_value));
 /// ```
 pub const Input = struct {
     allocator: std.mem.Allocator,
-    encoder: Encoder,
+    encoder: encoder_mod.Encoder,
 
     const Self = @This();
 
-    /// Initialize a new input builder
+    /// Initialize with compile-time backend selection (backward compatible).
+    /// Uses the backend specified via `-Dbackend=` build option.
     pub fn init(allocator: std.mem.Allocator) Self {
+        const build_options = @import("build_options");
+        const backend: Backend = switch (build_options.backend) {
+            .native => .native,
+            .zisk => .zisk,
+            .ligero => .ligero,
+        };
+        return initWithBackend(allocator, backend);
+    }
+
+    /// Initialize with runtime-selected backend.
+    /// Use this when the backend is determined at runtime (e.g., from Runtime options).
+    pub fn initWithBackend(allocator: std.mem.Allocator, backend: Backend) Self {
         return .{
             .allocator = allocator,
-            .encoder = Encoder.init(allocator),
+            .encoder = encoder_mod.Encoder.init(allocator, backend),
         };
     }
 
@@ -53,6 +58,9 @@ pub const Input = struct {
     /// Write a typed value to the input.
     /// Supports integers, floats, packed structs, and byte arrays/slices.
     /// All numeric types are serialized as little-endian.
+    ///
+    /// For Ligero: defaults to private input (backward compatible)
+    /// For other backends: writes to main buffer
     pub fn write(self: *Self, value: anytype) !void {
         return self.encoder.write(value);
     }
@@ -62,43 +70,57 @@ pub const Input = struct {
         return self.encoder.writeBytes(bytes);
     }
 
-    /// Write a typed value to public inputs (Ligero only)
+    /// Write a typed value to public inputs.
+    /// For Ligero: writes to public buffer (verifier-visible)
+    /// For other backends: writes to main buffer (public/private not distinguished)
     pub fn writePublic(self: *Self, value: anytype) !void {
-        if (build_options.backend != .ligero) {
-            @compileError("writePublic is only supported by the Ligero backend");
-        }
         return self.encoder.writePublic(value);
     }
 
-    /// Write raw bytes to public inputs (Ligero only)
+    /// Write raw bytes to public inputs.
     pub fn writePublicBytes(self: *Self, bytes: []const u8) !void {
-        if (build_options.backend != .ligero) {
-            @compileError("writePublicBytes is only supported by the Ligero backend");
-        }
         return self.encoder.writePublicBytes(bytes);
     }
 
-    /// Write a typed value to private inputs (Ligero only)
+    /// Write a typed value to private inputs.
+    /// For Ligero: writes to private buffer (witness, kept secret)
+    /// For other backends: writes to main buffer
     pub fn writePrivate(self: *Self, value: anytype) !void {
-        if (build_options.backend != .ligero) {
-            @compileError("writePrivate is only supported by the Ligero backend");
-        }
         return self.encoder.writePrivate(value);
     }
 
-    /// Write raw bytes to private inputs (Ligero only)
+    /// Write raw bytes to private inputs.
     pub fn writePrivateBytes(self: *Self, bytes: []const u8) !void {
-        if (build_options.backend != .ligero) {
-            @compileError("writePrivateBytes is only supported by the Ligero backend");
-        }
         return self.encoder.writePrivateBytes(bytes);
     }
 
-    /// Get the encoded input as bytes.
-    /// The encoding format depends on the configured backend.
+    /// Get the fully encoded input as bytes.
+    /// The encoding format depends on the backend:
+    /// - Native: raw data bytes
+    /// - ZisK: 16-byte header + data
+    /// - Ligero: [pub_len:u64][pub_data][priv_len:u64][priv_data]
+    ///
     /// Caller owns the returned slice and must free it.
     pub fn toBytes(self: *Self) ![]const u8 {
         return self.encoder.toBytes();
+    }
+
+    /// Get raw public bytes for Runtime.execute() separation.
+    /// For Ligero: returns just the public data without length prefix
+    /// For other backends: returns empty slice
+    ///
+    /// Caller owns the returned slice and must free it (if non-empty).
+    pub fn getPublicBytes(self: *Self) ![]const u8 {
+        return self.encoder.getPublicBytes();
+    }
+
+    /// Get raw private bytes for Runtime.execute() separation.
+    /// For Ligero: returns just the private data without length prefix
+    /// For other backends: returns all data
+    ///
+    /// Caller owns the returned slice and must free it (if non-empty).
+    pub fn getPrivateBytes(self: *Self) ![]const u8 {
+        return self.encoder.getPrivateBytes();
     }
 
     /// Write the encoded input to a file.
@@ -115,5 +137,20 @@ pub const Input = struct {
     /// Get the current size of the input data (excluding any header)
     pub fn size(self: *const Self) usize {
         return self.encoder.dataSize();
+    }
+
+    /// Check if there's any public data
+    pub fn hasPublicData(self: *const Self) bool {
+        return self.encoder.hasPublicData();
+    }
+
+    /// Check if there's any private data
+    pub fn hasPrivateData(self: *const Self) bool {
+        return self.encoder.hasPrivateData();
+    }
+
+    /// Get the backend this input is configured for
+    pub fn getBackend(self: *const Self) Backend {
+        return self.encoder.getBackend();
     }
 };
