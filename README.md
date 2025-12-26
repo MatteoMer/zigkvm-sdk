@@ -143,6 +143,44 @@ const secret = zigkvm.readPrivateInput(u64);
 - `output.read(id)` / `output.readU64(id)` - Read output values
 - `output.slice()` - Get all outputs as slice
 
+### Runtime API
+
+Execute guest programs directly from host code without external CLI tools:
+
+```zig
+const runtime = @import("zigkvm_runtime");
+
+var rt = try runtime.Runtime.init(allocator, .{
+    .backend = .zisk,
+    .guest_binary = build_options.guest_binary,
+});
+defer rt.deinit();
+
+// Create and populate input
+var input = rt.createInput();
+defer input.deinit();
+try input.write(@as(u64, 42));
+
+// Execute guest and read results
+const private_bytes = try input.getPrivateBytes();
+defer allocator.free(private_bytes);
+
+var result = try rt.execute(null, private_bytes);
+defer result.deinit();
+
+const output_value = result.output.readU64(0);
+if (result.cycles) |cycles| std.debug.print("Cycles: {d}\n", .{cycles});
+```
+
+**Runtime**
+- `Runtime.init(allocator, options)` - Initialize with backend and guest binary
+- `rt.createInput()` - Create input builder bound to this runtime
+- `rt.execute(public_input, private_input)` - Run guest and return results
+
+**ExecutionResult**
+- `result.output` - Output reader with `readU64(id)`, `read(id)`, `count()`
+- `result.cycles` - Optional cycle count from execution
+
 ## Examples
 
 Check out [`examples/`](examples/) for complete working projects:

@@ -1,8 +1,9 @@
 const std = @import("std");
-const host = @import("zigkvm_host");
+const runtime = @import("zigkvm_runtime");
+const build_options = @import("build_options");
 
 /// Host program for the Ligero private-input example.
-/// Prepares public and private inputs for the guest program.
+/// Executes the guest program using the runtime API with public/private separation.
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -31,24 +32,66 @@ pub fn main() !void {
     else
         secret * 3 + 7;
 
-    var input = host.Input.init(allocator);
+    // Map build backend to runtime backend
+    const backend: runtime.Backend = switch (build_options.backend) {
+        .zisk => .zisk,
+        .ligero => .ligero,
+    };
+
+    // Initialize runtime with guest binary from build options
+    var rt = try runtime.Runtime.init(allocator, .{
+        .backend = backend,
+        .guest_binary = build_options.guest_binary,
+    });
+    defer rt.deinit();
+
+    // Prepare input with public/private separation
+    var input = rt.createInput();
     defer input.deinit();
 
     try input.writePublic(expected);
     try input.writePrivate(secret);
 
+    std.debug.print("Public expected: {d}\n", .{expected});
+    std.debug.print("Private secret:  {d}\n", .{secret});
+
+    // Also write input.bin for CLI tools compatibility (prove step)
     try input.toFile("input.bin");
 
-    std.debug.print("Generated input.bin\n", .{});
-    std.debug.print("  Public expected: {d}\n", .{expected});
-    std.debug.print("  Private secret:  {d}\n", .{secret});
-    std.debug.print("Guest output (u64): {d}\n", .{expected});
+    // Get public and private bytes separately
+    const public_bytes = try input.getPublicBytes();
+    defer if (public_bytes.len > 0) allocator.free(public_bytes);
+
+    const private_bytes = try input.getPrivateBytes();
+    defer allocator.free(private_bytes);
+
+    // Execute guest program with public/private separation
+    var result = try rt.execute(
+        if (public_bytes.len > 0) public_bytes else null,
+        private_bytes,
+    );
+    defer result.deinit();
+
+    // Display results
+    std.debug.print("\nExecution completed!\n", .{});
+    if (result.cycles) |cycles| {
+        std.debug.print("Cycles: {d}\n", .{cycles});
+    }
+
+    if (result.output.count() >= 2) {
+        const output_value = result.output.readU64(0);
+        std.debug.print("Output: {d}\n", .{output_value});
+    } else {
+        std.debug.print("Output count: {d}\n", .{result.output.count()});
+    }
 }
+
+const host = @import("zigkvm_host");
 
 test "ligero private input encodes public and private payloads" {
     const allocator = std.testing.allocator;
 
-    var input = host.Input.init(allocator);
+    var input = host.Input.initWithBackend(allocator, .ligero);
     defer input.deinit();
 
     try input.writePublic(@as(u64, 10));

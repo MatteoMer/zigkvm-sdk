@@ -1,51 +1,70 @@
 const std = @import("std");
-const build_options = @import("build_options");
-const Backend = build_options.Backend;
+const decoder_mod = @import("decoder.zig");
 
-// Backend-specific decoders
-const native_decoder = @import("output_native.zig");
-const zisk_decoder = @import("output_zisk.zig");
-const ligero_decoder = @import("output_ligero.zig");
-
-/// Select decoder based on configured backend
-const Decoder = switch (build_options.backend) {
-    .native => native_decoder.Decoder,
-    .zisk => zisk_decoder.Decoder,
-    .ligero => ligero_decoder.Decoder,
-};
+/// Re-export Backend for convenience
+pub const Backend = decoder_mod.Backend;
 
 /// Host-side output reading for zkVM programs.
 /// Provides an ergonomic API for reading outputs from guest programs.
 ///
-/// Usage:
+/// Supports both compile-time and runtime backend selection:
+///
+/// ## Compile-time backend (backward compatible)
 /// ```zig
-/// // Load from file (zisk backend)
 /// var output = try Output.fromFile(allocator, "output.bin");
 /// defer output.deinit();
+/// const result = output.readU64(0);
+/// ```
 ///
+/// ## Runtime backend selection
+/// ```zig
+/// var output = try Output.fromFileWithBackend(allocator, "output.bin", .zisk);
+/// defer output.deinit();
 /// const result = output.readU64(0);
 /// ```
 pub const Output = struct {
     allocator: std.mem.Allocator,
-    decoder: Decoder,
+    decoder: decoder_mod.Decoder,
 
     const Self = @This();
 
-    /// Load outputs from a file
+    /// Load outputs from a file using compile-time backend (backward compatible).
+    /// Uses the backend specified via `-Dbackend=` build option.
     pub fn fromFile(allocator: std.mem.Allocator, path: []const u8) !Self {
-        const decoder = try Decoder.fromFile(allocator, path);
+        const build_options = @import("build_options");
+        const backend: Backend = switch (build_options.backend) {
+            .native => .native,
+            .zisk => .zisk,
+            .ligero => .ligero,
+        };
+        return fromFileWithBackend(allocator, path, backend);
+    }
+
+    /// Load outputs from raw bytes using compile-time backend (backward compatible).
+    pub fn fromBytes(allocator: std.mem.Allocator, bytes: []const u8) !Self {
+        const build_options = @import("build_options");
+        const backend: Backend = switch (build_options.backend) {
+            .native => .native,
+            .zisk => .zisk,
+            .ligero => .ligero,
+        };
+        return fromBytesWithBackend(allocator, bytes, backend);
+    }
+
+    /// Load outputs from a file with runtime-selected backend.
+    /// Use this when the backend is determined at runtime (e.g., from Runtime options).
+    pub fn fromFileWithBackend(allocator: std.mem.Allocator, path: []const u8, backend: Backend) !Self {
         return .{
             .allocator = allocator,
-            .decoder = decoder,
+            .decoder = try decoder_mod.Decoder.fromFile(allocator, path, backend),
         };
     }
 
-    /// Load outputs from raw bytes
-    pub fn fromBytes(allocator: std.mem.Allocator, bytes: []const u8) !Self {
-        const decoder = try Decoder.fromBytes(allocator, bytes);
+    /// Load outputs from raw bytes with runtime-selected backend.
+    pub fn fromBytesWithBackend(allocator: std.mem.Allocator, bytes: []const u8, backend: Backend) !Self {
         return .{
             .allocator = allocator,
-            .decoder = decoder,
+            .decoder = try decoder_mod.Decoder.fromBytes(allocator, bytes, backend),
         };
     }
 
@@ -73,5 +92,10 @@ pub const Output = struct {
     /// Get all outputs as a slice of u32 values
     pub fn slice(self: *const Self) []const u32 {
         return self.decoder.slice();
+    }
+
+    /// Get the backend that produced this output
+    pub fn getBackend(self: *const Self) Backend {
+        return self.decoder.getBackend();
     }
 };
