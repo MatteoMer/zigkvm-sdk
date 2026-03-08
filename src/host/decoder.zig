@@ -4,12 +4,14 @@ const std = @import("std");
 const native_decoder = @import("backends/native/decoder.zig");
 const zisk_decoder = @import("backends/zisk/decoder.zig");
 const ligero_decoder = @import("backends/ligero/decoder.zig");
+const jolt_decoder = @import("backends/jolt/decoder.zig");
 
 /// Backend selection for runtime decoding
 pub const Backend = enum {
     native,
     zisk,
     ligero,
+    jolt,
 };
 
 /// Runtime-selectable decoder that wraps backend-specific decoders.
@@ -18,6 +20,7 @@ pub const Decoder = union(Backend) {
     native: native_decoder.Decoder,
     zisk: zisk_decoder.Decoder,
     ligero: ligero_decoder.Decoder,
+    jolt: jolt_decoder.Decoder,
 
     const Self = @This();
 
@@ -27,6 +30,7 @@ pub const Decoder = union(Backend) {
             .native => .{ .native = try native_decoder.Decoder.fromFile(allocator, path) },
             .zisk => .{ .zisk = try zisk_decoder.Decoder.fromFile(allocator, path) },
             .ligero => .{ .ligero = try ligero_decoder.Decoder.fromFile(allocator, path) },
+            .jolt => .{ .jolt = try jolt_decoder.Decoder.fromFile(allocator, path) },
         };
     }
 
@@ -36,6 +40,7 @@ pub const Decoder = union(Backend) {
             .native => .{ .native = try native_decoder.Decoder.fromBytes(allocator, bytes) },
             .zisk => .{ .zisk = try zisk_decoder.Decoder.fromBytes(allocator, bytes) },
             .ligero => .{ .ligero = try ligero_decoder.Decoder.fromBytes(allocator, bytes) },
+            .jolt => .{ .jolt = try jolt_decoder.Decoder.fromBytes(allocator, bytes) },
         };
     }
 

@@ -36,6 +36,7 @@ pub const Output = struct {
             .native => .native,
             .zisk => .zisk,
             .ligero => .ligero,
+            .jolt => .jolt,
         };
         return fromFileWithBackend(allocator, path, backend);
     }
@@ -47,6 +48,7 @@ pub const Output = struct {
             .native => .native,
             .zisk => .zisk,
             .ligero => .ligero,
+            .jolt => .jolt,
         };
         return fromBytesWithBackend(allocator, bytes, backend);
     }

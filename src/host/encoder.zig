@@ -4,12 +4,14 @@ const std = @import("std");
 const native_encoder = @import("backends/native/encoder.zig");
 const zisk_encoder = @import("backends/zisk/encoder.zig");
 const ligero_encoder = @import("backends/ligero/encoder.zig");
+const jolt_encoder = @import("backends/jolt/encoder.zig");
 
 /// Backend selection for runtime encoding
 pub const Backend = enum {
     native,
     zisk,
     ligero,
+    jolt,
 };
 
 /// Runtime-selectable encoder that wraps backend-specific encoders.
@@ -18,6 +20,7 @@ pub const Encoder = union(Backend) {
     native: native_encoder.Encoder,
     zisk: zisk_encoder.Encoder,
     ligero: ligero_encoder.Encoder,
+    jolt: jolt_encoder.Encoder,
 
     const Self = @This();
 
@@ -27,6 +30,7 @@ pub const Encoder = union(Backend) {
             .native => .{ .native = native_encoder.Encoder.init(allocator) },
             .zisk => .{ .zisk = zisk_encoder.Encoder.init(allocator) },
             .ligero => .{ .ligero = ligero_encoder.Encoder.init(allocator) },
+            .jolt => .{ .jolt = jolt_encoder.Encoder.init(allocator) },
         };
     }
 
@@ -63,6 +67,7 @@ pub const Encoder = union(Backend) {
             // For non-Ligero backends, public data is just added to the main buffer
             .native => |*enc| try enc.write(value),
             .zisk => |*enc| try enc.write(value),
+            .jolt => |*enc| try enc.write(value),
         }
     }
 
@@ -73,6 +78,7 @@ pub const Encoder = union(Backend) {
             .ligero => |*enc| try enc.writePublicBytes(bytes),
             .native => |*enc| try enc.writeBytes(bytes),
             .zisk => |*enc| try enc.writeBytes(bytes),
+            .jolt => |*enc| try enc.writeBytes(bytes),
         }
     }
 
@@ -84,6 +90,7 @@ pub const Encoder = union(Backend) {
             .ligero => |*enc| try enc.writePrivate(value),
             .native => |*enc| try enc.write(value),
             .zisk => |*enc| try enc.write(value),
+            .jolt => |*enc| try enc.write(value),
         }
     }
 
@@ -95,6 +102,7 @@ pub const Encoder = union(Backend) {
             .ligero => |*enc| try enc.writePrivateBytes(bytes),
             .native => |*enc| try enc.writeBytes(bytes),
             .zisk => |*enc| try enc.writeBytes(bytes),
+            .jolt => |*enc| try enc.writeBytes(bytes),
         }
     }
 
@@ -125,7 +133,7 @@ pub const Encoder = union(Backend) {
                 @memcpy(result, enc.public_data.items);
                 return result;
             },
-            .native, .zisk => &[_]u8{},
+            .native, .zisk, .jolt => &[_]u8{},
         };
     }
 
@@ -141,14 +149,7 @@ pub const Encoder = union(Backend) {
                 @memcpy(result, enc.private_data.items);
                 return result;
             },
-            .native => |*enc| {
-                const size = enc.data.items.len;
-                if (size == 0) return &[_]u8{};
-                const result = try self.getAllocator().alloc(u8, size);
-                @memcpy(result, enc.data.items);
-                return result;
-            },
-            .zisk => |*enc| {
+            inline .native, .zisk, .jolt => |*enc| {
                 const size = enc.data.items.len;
                 if (size == 0) return &[_]u8{};
                 const result = try self.getAllocator().alloc(u8, size);
@@ -162,7 +163,7 @@ pub const Encoder = union(Backend) {
     pub fn hasPublicData(self: *const Self) bool {
         return switch (self.*) {
             .ligero => |*enc| enc.hasPublicData(),
-            .native, .zisk => false,
+            .native, .zisk, .jolt => false,
         };
     }
 
@@ -170,8 +171,7 @@ pub const Encoder = union(Backend) {
     pub fn hasPrivateData(self: *const Self) bool {
         return switch (self.*) {
             .ligero => |*enc| enc.hasPrivateData(),
-            .native => |*enc| enc.data.items.len > 0,
-            .zisk => |*enc| enc.data.items.len > 0,
+            inline .native, .zisk, .jolt => |*enc| enc.data.items.len > 0,
         };
     }
 

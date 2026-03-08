@@ -82,6 +82,7 @@ pub const encoders = struct {
     pub const native = @import("host/backends/native/encoder.zig");
     pub const zisk = @import("host/backends/zisk/encoder.zig");
     pub const ligero = @import("host/backends/ligero/encoder.zig");
+    pub const jolt = @import("host/backends/jolt/encoder.zig");
     pub const Encoder = @import("host/encoder.zig").Encoder;
 };
 
@@ -89,5 +90,6 @@ pub const decoders = struct {
     pub const native = @import("host/backends/native/decoder.zig");
     pub const zisk = @import("host/backends/zisk/decoder.zig");
     pub const ligero = @import("host/backends/ligero/decoder.zig");
+    pub const jolt = @import("host/backends/jolt/decoder.zig");
     pub const Decoder = @import("host/decoder.zig").Decoder;
 };

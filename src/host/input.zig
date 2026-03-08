@@ -37,6 +37,7 @@ pub const Input = struct {
             .native => .native,
             .zisk => .zisk,
             .ligero => .ligero,
+            .jolt => .jolt,
         };
         return initWithBackend(allocator, backend);
     }
