@@ -164,13 +164,11 @@ pub const ZisKProver = struct {
         );
         defer self.allocator.free(output_path);
 
-        const outputs = runtime.OutputData.fromFile(self.allocator, output_path) catch {
-            // Output might not exist
+        const outputs = runtime.OutputData.fromFile(self.allocator, output_path) catch
             runtime.OutputData{
-                .allocator = self.allocator,
-                .values = try self.allocator.alloc(u32, 0),
-                .count = 0,
-            };
+            .allocator = self.allocator,
+            .values = try self.allocator.alloc(u32, 0),
+            .count = 0,
         };
 
         const proof_time = @as(u64, @intCast(std.time.milliTimestamp() - start_time));

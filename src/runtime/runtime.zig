@@ -4,21 +4,25 @@ const host = @import("host");
 // Backend executors
 pub const zisk_executor = @import("executor/zisk.zig");
 pub const ligero_executor = @import("executor/ligero.zig");
+pub const jolt_executor = @import("executor/jolt.zig");
 
 // Backend provers
 pub const zisk_prover = @import("prover/zisk.zig");
 pub const ligero_prover = @import("prover/ligero.zig");
+pub const jolt_prover = @import("prover/jolt.zig");
 
 /// Available backends for the runtime
 pub const Backend = enum {
     zisk,
     ligero,
+    jolt,
 
     /// Convert to host.Backend for input/output encoding
     pub fn toHostBackend(self: Backend) host.Backend {
         return switch (self) {
             .zisk => .zisk,
             .ligero => .ligero,
+            .jolt => .jolt,
         };
     }
 };
@@ -280,6 +284,12 @@ pub const Options = struct {
     // Ligero-specific options
     /// Path to Ligero shader directory
     shader_path: ?[]const u8 = null,
+
+    // Jolt-specific options
+    /// Path to Dory SRS file for Jolt proving
+    srs_path: ?[]const u8 = null,
+    /// Heap size for Jolt emulation (default: 32KB)
+    jolt_heap_size: u64 = 32768,
 };
 
 /// High-level runtime for executing and proving zkVM programs.
@@ -331,6 +341,8 @@ pub const Runtime = struct {
     zisk_prov: ?zisk_prover.ZisKProver,
     ligero_exec: ?ligero_executor.LigeroExecutor,
     ligero_prov: ?ligero_prover.LigeroProver,
+    jolt_exec: ?jolt_executor.JoltExecutor,
+    jolt_prov: ?jolt_prover.JoltProver,
 
     // Mutex for thread-safe operations
     mutex: std.Thread.Mutex,
@@ -350,6 +362,8 @@ pub const Runtime = struct {
             .zisk_prov = null,
             .ligero_exec = null,
             .ligero_prov = null,
+            .jolt_exec = null,
+            .jolt_prov = null,
             .mutex = .{},
         };
 
@@ -364,6 +378,11 @@ pub const Runtime = struct {
             .ligero => {
                 self.ligero_exec = try ligero_executor.LigeroExecutor.init(allocator, .{
                     .shader_path = options.shader_path,
+                });
+            },
+            .jolt => {
+                self.jolt_exec = try jolt_executor.JoltExecutor.init(allocator, .{
+                    .heap_size = options.jolt_heap_size,
                 });
             },
         }
@@ -383,6 +402,12 @@ pub const Runtime = struct {
                         .shader_path = options.shader_path,
                     });
                 },
+                .jolt => {
+                    self.jolt_prov = try jolt_prover.JoltProver.init(allocator, .{
+                        .srs_path = options.srs_path,
+                        .heap_size = options.jolt_heap_size,
+                    });
+                },
             }
         }
 
@@ -396,6 +421,8 @@ pub const Runtime = struct {
         if (self.zisk_prov) |*p| p.deinit();
         if (self.ligero_exec) |*e| e.deinit();
         if (self.ligero_prov) |*p| p.deinit();
+        if (self.jolt_exec) |*e| e.deinit();
+        if (self.jolt_prov) |*p| p.deinit();
     }
 
     /// Create an Input builder for this runtime's backend.
@@ -419,6 +446,7 @@ pub const Runtime = struct {
         return switch (self.options.backend) {
             .zisk => try self.executeZisk(public_input, private_input),
             .ligero => try self.executeLigero(public_input, private_input),
+            .jolt => try self.executeJolt(public_input, private_input),
         };
     }
 
@@ -430,6 +458,7 @@ pub const Runtime = struct {
         return switch (self.options.backend) {
             .zisk => try self.executeZiskRaw(input),
             .ligero => try self.executeLigeroRaw(input),
+            .jolt => try self.executeJoltRaw(input),
         };
     }
 
@@ -503,6 +532,61 @@ pub const Runtime = struct {
             .stdout = exec_result.stdout,
             .stderr = exec_result.stderr,
         };
+    }
+
+    // Internal: Execute on Jolt with public/private separation
+    fn executeJolt(self: *Self, public_input: ?[]const u8, private_input: []const u8) !ExecutionResult {
+        // Jolt doesn't distinguish public/private - combine into single input
+        const combined = try self.encodeJoltInput(public_input, private_input);
+        defer self.allocator.free(combined);
+
+        return self.executeJoltRaw(combined);
+    }
+
+    // Internal: Execute on Jolt with raw pre-encoded input
+    fn executeJoltRaw(self: *Self, input: []const u8) !ExecutionResult {
+        var exec_result = try self.jolt_exec.?.execute(self.guest_binary, input);
+
+        // Convert OutputData to bytes for host.Output
+        const output_bytes = try self.outputDataToBytes(exec_result.outputs);
+        defer self.allocator.free(output_bytes);
+
+        // Free the original OutputData values
+        exec_result.outputs.deinit();
+
+        // Create backend-aware Output
+        const output = try host.Output.fromBytesWithBackend(
+            self.allocator,
+            output_bytes,
+            .jolt,
+        );
+
+        return ExecutionResult{
+            .allocator = self.allocator,
+            .output = output,
+            .cycles = exec_result.cycles,
+            .stdout = exec_result.stdout,
+            .stderr = exec_result.stderr,
+        };
+    }
+
+    // Internal: Encode input for Jolt (8-byte size header + data)
+    fn encodeJoltInput(self: *Self, public_input: ?[]const u8, private_input: []const u8) ![]const u8 {
+        const pub_len = if (public_input) |p| p.len else 0;
+        const total_data_len = pub_len + private_input.len;
+
+        // Jolt format: 8 size + data
+        const result = try self.allocator.alloc(u8, 8 + total_data_len);
+        errdefer self.allocator.free(result);
+
+        std.mem.writeInt(u64, result[0..8], total_data_len, .little);
+
+        if (public_input) |p| {
+            @memcpy(result[8..][0..pub_len], p);
+        }
+        @memcpy(result[8 + pub_len ..], private_input);
+
+        return result;
     }
 
     // Internal: Encode input for ZisK (16-byte header + data)
@@ -582,6 +666,7 @@ pub const Runtime = struct {
         return switch (self.options.backend) {
             .zisk => try self.proveZisk(public_input, private_input),
             .ligero => try self.proveLigero(public_input, private_input),
+            .jolt => try self.proveJolt(public_input, private_input),
         };
     }
 
@@ -594,6 +679,7 @@ pub const Runtime = struct {
         return switch (self.options.backend) {
             .zisk => try self.proveZiskRaw(input),
             .ligero => try self.proveLigeroRaw(input),
+            .jolt => try self.proveJoltRaw(input),
         };
     }
 
@@ -665,6 +751,40 @@ pub const Runtime = struct {
         };
     }
 
+    // Internal: Prove on Jolt with public/private separation
+    fn proveJolt(self: *Self, public_input: ?[]const u8, private_input: []const u8) !ProofResult {
+        const combined = try self.encodeJoltInput(public_input, private_input);
+        defer self.allocator.free(combined);
+        return self.proveJoltRaw(combined);
+    }
+
+    // Internal: Prove on Jolt with raw input
+    fn proveJoltRaw(self: *Self, input: []const u8) !ProofResult {
+        var prove_result = try self.jolt_prov.?.prove(self.guest_binary, input);
+
+        // Convert OutputData to bytes for host.Output
+        const output_bytes = try self.outputDataToBytes(prove_result.outputs);
+        defer self.allocator.free(output_bytes);
+
+        // Free the original OutputData values
+        prove_result.outputs.deinit();
+
+        const output = try host.Output.fromBytesWithBackend(
+            self.allocator,
+            output_bytes,
+            .jolt,
+        );
+
+        return ProofResult{
+            .allocator = self.allocator,
+            .output = output,
+            .proof = prove_result.proof,
+            .proof_time_ms = prove_result.proof_time_ms,
+            .stdout = prove_result.stdout,
+            .stderr = prove_result.stderr,
+        };
+    }
+
     /// Verify a proof
     pub fn verify(self: *Self, proof: *const Proof, public_inputs: ?[]const u8) !bool {
         if (!self.options.enable_proving) {
@@ -674,6 +794,7 @@ pub const Runtime = struct {
         return switch (self.options.backend) {
             .zisk => try self.zisk_prov.?.verify(proof, public_inputs),
             .ligero => try self.ligero_prov.?.verify(proof, public_inputs),
+            .jolt => try self.jolt_prov.?.verify(proof, public_inputs),
         };
     }
 
@@ -688,3 +809,5 @@ pub const ZisKExecutor = zisk_executor.ZisKExecutor;
 pub const ZisKProver = zisk_prover.ZisKProver;
 pub const LigeroExecutor = ligero_executor.LigeroExecutor;
 pub const LigeroProver = ligero_prover.LigeroProver;
+pub const JoltExecutor = jolt_executor.JoltExecutor;
+pub const JoltProver = jolt_prover.JoltProver;

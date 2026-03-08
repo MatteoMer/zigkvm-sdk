@@ -292,39 +292,41 @@ pub const LigeroProver = struct {
         const file = try std.fs.cwd().createFile(config_path, .{});
         defer file.close();
 
-        var writer = file.writer();
-
-        try writer.writeAll("{\n");
-        try writer.print("  \"program\": \"{s}\",\n", .{wasm_path});
+        try file.writeAll("{\n");
+        const prog_line = try std.fmt.allocPrint(self.allocator, "  \"program\": \"{s}\",\n", .{wasm_path});
+        defer self.allocator.free(prog_line);
+        try file.writeAll(prog_line);
         if (self.shader_path) |sp| {
-            try writer.print("  \"shader-path\": \"{s}\",\n", .{sp});
+            const shader_line = try std.fmt.allocPrint(self.allocator, "  \"shader-path\": \"{s}\",\n", .{sp});
+            defer self.allocator.free(shader_line);
+            try file.writeAll(shader_line);
         }
-        try writer.writeAll("  \"packing\": 8192,\n");
-        try writer.writeAll("  \"private-indices\": [");
+        try file.writeAll("  \"packing\": 8192,\n");
+        try file.writeAll("  \"private-indices\": [");
         if (has_public and has_private) {
-            try writer.writeAll("2");
+            try file.writeAll("2");
         } else if (has_private) {
-            try writer.writeAll("1");
+            try file.writeAll("1");
         }
-        try writer.writeAll("],\n");
-        try writer.writeAll("  \"args\": [");
+        try file.writeAll("],\n");
+        try file.writeAll("  \"args\": [");
 
         var first = true;
         if (has_public) {
-            if (!first) try writer.writeAll(",");
-            try writer.writeAll("\n    {\"hex\": \"");
-            try writeHex(writer, public_data);
-            try writer.writeAll("\"}");
+            if (!first) try file.writeAll(",");
+            try file.writeAll("\n    {\"hex\": \"");
+            try writeHex(file, public_data);
+            try file.writeAll("\"}");
             first = false;
         }
         if (has_private) {
-            if (!first) try writer.writeAll(",");
-            try writer.writeAll("\n    {\"hex\": \"");
-            try writeHex(writer, private_data);
-            try writer.writeAll("\"}");
+            if (!first) try file.writeAll(",");
+            try file.writeAll("\n    {\"hex\": \"");
+            try writeHex(file, private_data);
+            try file.writeAll("\"}");
         }
 
-        try writer.writeAll("\n  ]\n}\n");
+        try file.writeAll("\n  ]\n}\n");
     }
 
     /// Create verification config JSON
@@ -332,29 +334,30 @@ pub const LigeroProver = struct {
         const file = try std.fs.cwd().createFile(config_path, .{});
         defer file.close();
 
-        var writer = file.writer();
-
-        try writer.writeAll("{\n");
-        try writer.print("  \"proof\": \"{s}\",\n", .{proof_path});
+        try file.writeAll("{\n");
+        const proof_line = try std.fmt.allocPrint(self.allocator, "  \"proof\": \"{s}\",\n", .{proof_path});
+        defer self.allocator.free(proof_line);
+        try file.writeAll(proof_line);
         if (self.shader_path) |sp| {
-            try writer.print("  \"shader-path\": \"{s}\",\n", .{sp});
+            const shader_line = try std.fmt.allocPrint(self.allocator, "  \"shader-path\": \"{s}\",\n", .{sp});
+            defer self.allocator.free(shader_line);
+            try file.writeAll(shader_line);
         }
         if (public_inputs.len > 0) {
-            try writer.writeAll("  \"public-inputs\": \"");
-            try writeHex(writer, public_inputs);
-            try writer.writeAll("\"\n");
+            try file.writeAll("  \"public-inputs\": \"");
+            try writeHex(file, public_inputs);
+            try file.writeAll("\"\n");
         }
-        try writer.writeAll("}\n");
+        try file.writeAll("}\n");
     }
 };
 
 /// Write bytes as hex string with 0x prefix
-fn writeHex(writer: anytype, data: []const u8) !void {
+fn writeHex(file: std.fs.File, data: []const u8) !void {
     const hex_chars = "0123456789abcdef";
-    try writer.writeAll("0x");
+    try file.writeAll("0x");
     for (data) |byte| {
-        try writer.writeByte(hex_chars[byte >> 4]);
-        try writer.writeByte(hex_chars[byte & 0x0f]);
+        try file.writeAll(&[_]u8{ hex_chars[byte >> 4], hex_chars[byte & 0x0f] });
     }
 }
 
