@@ -7,7 +7,8 @@
 
 ## Build, Test, and Development Commands
 - `zig build -Dbackend=native` — local dev build with host target and standard optimizations.
-- `zig build -Dbackend=zisk -Doptimize=ReleaseSmall` — zkVM output using the provided linker script.
+- `zig build -Dbackend=zisk -Doptimize=ReleaseSmall` — zkVM output using the ZisK linker script.
+- `zig build -Dbackend=jolt -Doptimize=ReleaseSmall` — zkVM output for Jolt/Zolt (RV64IM, uses `src/jolt.ld`).
 - `zig build test` — runs tests against the native backend; use before every PR.
 - Quick iteration: `zig test src/backends/native.zig -Doptimize=Debug` while developing helpers.
 

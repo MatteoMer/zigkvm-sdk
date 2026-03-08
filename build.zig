@@ -8,20 +8,23 @@ pub const Backend = enum {
     native,
     /// Ligero zkVM backend (WebGPU-based)
     ligero,
+    /// Jolt zkVM backend (via Zolt)
+    jolt,
 
     pub fn fromString(str: ?[]const u8) Backend {
         const s = str orelse return .native;
         if (std.mem.eql(u8, s, "zisk")) return .zisk;
         if (std.mem.eql(u8, s, "native")) return .native;
         if (std.mem.eql(u8, s, "ligero")) return .ligero;
-        std.debug.print("Unknown backend: {s}. Valid options: native, zisk, ligero\n", .{s});
+        if (std.mem.eql(u8, s, "jolt")) return .jolt;
+        std.debug.print("Unknown backend: {s}. Valid options: native, zisk, ligero, jolt\n", .{s});
         return .native;
     }
 };
 
 pub fn build(b: *std.Build) void {
     // Backend selection option (accepts string for easier dependency forwarding)
-    const backend_str = b.option([]const u8, "backend", "zkVM backend to use: native (default), zisk, ligero");
+    const backend_str = b.option([]const u8, "backend", "zkVM backend to use: native (default), zisk, ligero, jolt");
     const backend = Backend.fromString(backend_str);
 
     // Standard options for native builds
@@ -34,6 +37,13 @@ pub fn build(b: *std.Build) void {
             .cpu_arch = .riscv64,
             .os_tag = .freestanding,
             .abi = .none,
+            .cpu_features_sub = std.Target.riscv.featureSet(&.{.c}),
+        }),
+        .jolt => b.resolveTargetQuery(.{
+            .cpu_arch = .riscv64,
+            .os_tag = .freestanding,
+            .abi = .none,
+            .cpu_features_add = std.Target.riscv.featureSet(&.{.m}),
             .cpu_features_sub = std.Target.riscv.featureSet(&.{.c}),
         }),
         .ligero => b.resolveTargetQuery(.{
@@ -53,7 +63,7 @@ pub fn build(b: *std.Build) void {
     const precompiles_types_mod = b.createModule(.{
         .root_source_file = b.path("src/precompiles/types.zig"),
         .target = target,
-        .optimize = if (backend == .zisk or backend == .ligero) .ReleaseSmall else optimize,
+        .optimize = if (backend == .zisk or backend == .ligero or backend == .jolt) .ReleaseSmall else optimize,
     });
 
     // Create precompiles module (only for ZisK backend)
@@ -73,9 +83,10 @@ pub fn build(b: *std.Build) void {
             .zisk => b.path("src/backends/zisk.zig"),
             .native => b.path("src/backends/native.zig"),
             .ligero => b.path("src/backends/ligero.zig"),
+            .jolt => b.path("src/backends/jolt.zig"),
         },
         .target = target,
-        .optimize = if (backend == .zisk or backend == .ligero) .ReleaseSmall else optimize,
+        .optimize = if (backend == .zisk or backend == .ligero or backend == .jolt) .ReleaseSmall else optimize,
         .imports = if (backend == .zisk) &.{
             .{ .name = "build_options", .module = options_mod },
             .{ .name = "precompiles", .module = lib_precompiles_mod.? },
@@ -84,7 +95,7 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    if (backend == .zisk) {
+    if (backend == .zisk or backend == .jolt) {
         zigkvm_module.code_model = .medium;
         zigkvm_module.red_zone = false;
         zigkvm_module.stack_protector = false;
@@ -107,6 +118,13 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    // Get zolt dependency for the runtime module
+    const zolt_dep = b.dependency("zolt", .{
+        .target = native_target,
+        .optimize = optimize,
+    });
+    const zolt_module = zolt_dep.module("zolt");
+
     // Runtime module for programmatic proving and emulation
     // Backend is selected at runtime, not compile time
     _ = b.addModule("zigkvm_runtime", .{
@@ -115,6 +133,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{
             .{ .name = "host", .module = host_module },
+            .{ .name = "zolt", .module = zolt_module },
         },
     });
 
@@ -196,6 +215,34 @@ pub fn build(b: *std.Build) void {
     const run_host_output_zisk_tests = b.addRunArtifact(host_output_zisk_tests);
     test_step.dependOn(&run_host_output_zisk_tests.step);
 
+    // Host module tests (jolt encoder)
+    const host_jolt_test_module = b.createModule(.{
+        .root_source_file = b.path("src/host/backends/jolt/encoder.zig"),
+        .target = native_target,
+        .optimize = optimize,
+    });
+
+    const host_jolt_tests = b.addTest(.{
+        .root_module = host_jolt_test_module,
+    });
+
+    const run_host_jolt_tests = b.addRunArtifact(host_jolt_tests);
+    test_step.dependOn(&run_host_jolt_tests.step);
+
+    // Host module tests (jolt output decoder)
+    const host_output_jolt_test_module = b.createModule(.{
+        .root_source_file = b.path("src/host/backends/jolt/decoder.zig"),
+        .target = native_target,
+        .optimize = optimize,
+    });
+
+    const host_output_jolt_tests = b.addTest(.{
+        .root_module = host_output_jolt_test_module,
+    });
+
+    const run_host_output_jolt_tests = b.addRunArtifact(host_output_jolt_tests);
+    test_step.dependOn(&run_host_output_jolt_tests.step);
+
     // Runtime module tests
     const runtime_test_module = b.createModule(.{
         .root_source_file = b.path("src/runtime/runtime.zig"),
@@ -203,6 +250,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{
             .{ .name = "host", .module = host_module },
+            .{ .name = "zolt", .module = zolt_module },
         },
     });
 
