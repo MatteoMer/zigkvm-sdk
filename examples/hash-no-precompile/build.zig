@@ -2,7 +2,7 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) void {
     // Forward backend string to the SDK - it owns the Backend enum
-    const backend_str = b.option([]const u8, "backend", "zkVM backend: native (default), zisk, ligero");
+    const backend_str = b.option([]const u8, "backend", "zkVM backend: native (default), zisk, ligero, jolt");
     const native_target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
@@ -13,11 +13,12 @@ pub fn build(b: *std.Build) void {
     });
 
     // Parse backend locally for build logic (target selection, prove steps, etc.)
-    const Backend = enum { zisk, native, ligero };
+    const Backend = enum { zisk, native, ligero, jolt };
     const backend: Backend = blk: {
         const s = backend_str orelse break :blk .native;
         if (std.mem.eql(u8, s, "zisk")) break :blk .zisk;
         if (std.mem.eql(u8, s, "ligero")) break :blk .ligero;
+        if (std.mem.eql(u8, s, "jolt")) break :blk .jolt;
         break :blk .native;
     };
 
@@ -31,6 +32,13 @@ pub fn build(b: *std.Build) void {
             .abi = .none,
             .cpu_features_sub = std.Target.riscv.featureSet(&.{.c}),
         }),
+        .jolt => b.resolveTargetQuery(.{
+            .cpu_arch = .riscv64,
+            .os_tag = .freestanding,
+            .abi = .none,
+            .cpu_features_add = std.Target.riscv.featureSet(&.{.m}),
+            .cpu_features_sub = std.Target.riscv.featureSet(&.{.c}),
+        }),
         .ligero => b.resolveTargetQuery(.{
             .cpu_arch = .wasm32,
             .os_tag = .wasi,
@@ -42,10 +50,10 @@ pub fn build(b: *std.Build) void {
     var guest_module_options: std.Build.Module.CreateOptions = .{
         .root_source_file = b.path("src/guest/main.zig"),
         .target = guest_target,
-        .optimize = if (backend == .zisk or backend == .ligero) .ReleaseSmall else optimize,
+        .optimize = if (backend == .zisk or backend == .ligero or backend == .jolt) .ReleaseSmall else optimize,
     };
 
-    if (backend == .zisk) {
+    if (backend == .zisk or backend == .jolt) {
         guest_module_options.code_model = .medium;
         guest_module_options.red_zone = false;
         guest_module_options.stack_protector = false;
@@ -68,6 +76,9 @@ pub fn build(b: *std.Build) void {
     if (backend == .zisk) {
         guest_exe.setLinkerScript(zigkvm_dep.path("src/zisk.ld"));
     }
+    if (backend == .jolt) {
+        guest_exe.setLinkerScript(zigkvm_dep.path("src/jolt.ld"));
+    }
 
     b.installArtifact(guest_exe);
 
@@ -76,7 +87,7 @@ pub fn build(b: *std.Build) void {
     // ============================================================
 
     // Create build options for host (backend and guest path)
-    const RuntimeBackend = enum { zisk, ligero };
+    const RuntimeBackend = enum { zisk, ligero, jolt };
     const options = b.addOptions();
 
     // Map backend to runtime backend (runtime doesn't support native)
@@ -84,6 +95,8 @@ pub fn build(b: *std.Build) void {
         options.addOption(RuntimeBackend, "backend", .zisk);
     } else if (backend == .ligero) {
         options.addOption(RuntimeBackend, "backend", .ligero);
+    } else if (backend == .jolt) {
+        options.addOption(RuntimeBackend, "backend", .jolt);
     }
 
     // Pass guest binary path - use the installed path
@@ -109,7 +122,7 @@ pub fn build(b: *std.Build) void {
     // ============================================================
     // Run: Execute guest using runtime (zisk/ligero only)
     // ============================================================
-    if (backend == .zisk or backend == .ligero) {
+    if (backend == .zisk or backend == .ligero or backend == .jolt) {
         const run_host = b.addRunArtifact(host_exe);
         run_host.step.dependOn(b.getInstallStep());
         if (b.args) |args| {
@@ -266,5 +279,22 @@ pub fn build(b: *std.Build) void {
             "ligero-config.json",
         });
         verify_step.dependOn(&ligero_verify.step);
+    }
+
+    // ============================================================
+    // Prove: Generate ZK proof using zolt (jolt backend only)
+    // ============================================================
+    if (backend == .jolt) {
+        const prove_step = b.step("prove", "Generate ZK proof with Zolt");
+        prove_step.dependOn(b.getInstallStep());
+
+        const prove_host = b.addRunArtifact(host_exe);
+        prove_host.step.dependOn(b.getInstallStep());
+        prove_host.addArg("--prove");
+        if (b.args) |extra_args| {
+            prove_host.addArgs(extra_args);
+        }
+
+        prove_step.dependOn(&prove_host.step);
     }
 }

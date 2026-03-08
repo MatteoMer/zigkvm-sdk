@@ -12,25 +12,31 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    const input_value: u64 = if (args.len > 1)
-        std.fmt.parseInt(u64, args[1], 10) catch {
-            std.debug.print("Usage: {s} [input_value]\n", .{args[0]});
-            std.debug.print("  input_value: u64 to double (default: 21)\n", .{});
-            return;
+    var enable_proving = false;
+    var input_value: u64 = 21;
+    for (args[1..]) |arg| {
+        if (std.mem.eql(u8, arg, "--prove")) {
+            enable_proving = true;
+        } else {
+            input_value = std.fmt.parseInt(u64, arg, 10) catch {
+                std.debug.print("Usage: {s} [--prove] [input_value]\n", .{args[0]});
+                return;
+            };
         }
-    else
-        21; // Default value
+    }
 
     // Map build backend to runtime backend
     const backend: runtime.Backend = switch (build_options.backend) {
         .zisk => .zisk,
         .ligero => .ligero,
+        .jolt => .jolt,
     };
 
     // Initialize runtime with guest binary from build options
     var rt = try runtime.Runtime.init(allocator, .{
         .backend = backend,
         .guest_binary = build_options.guest_binary,
+        .enable_proving = enable_proving,
     });
     defer rt.deinit();
 
@@ -63,6 +69,15 @@ pub fn main() !void {
         std.debug.print("Output: {d}\n", .{output_value});
     } else {
         std.debug.print("Output count: {d}\n", .{result.output.count()});
+    }
+
+    if (enable_proving) {
+        std.debug.print("\nGenerating proof...\n", .{});
+        var proof_result = try rt.prove(null, private_bytes);
+        defer proof_result.deinit();
+        std.debug.print("Proof generated in {d}ms ({d} bytes)\n", .{ proof_result.proof_time_ms, proof_result.proof.data.len });
+        try proof_result.proof.toFile("proof.bin");
+        std.debug.print("Proof saved to proof.bin\n", .{});
     }
 }
 

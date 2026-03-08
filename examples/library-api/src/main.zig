@@ -21,6 +21,7 @@ pub fn main() !void {
     const backend: runtime.Backend = switch (build_options.backend) {
         .zisk => .zisk,
         .ligero => .ligero,
+        .jolt => .jolt,
     };
 
     const args = try std.process.argsAlloc(allocator);
@@ -28,7 +29,7 @@ pub fn main() !void {
 
     if (args.len < 3) {
         const backend_name = @tagName(backend);
-        const ext = if (backend == .zisk) ".elf" else ".wasm";
+        const ext = if (backend == .ligero) ".wasm" else ".elf";
         std.debug.print("Usage: {s} <guest{s}> <input_value>\n", .{ args[0], ext });
         std.debug.print("\nBackend: {s} (use -Dbackend=zisk or -Dbackend=ligero)\n", .{backend_name});
         std.debug.print("\nExample:\n", .{});
@@ -61,12 +62,18 @@ pub fn main() !void {
     var input_bytes: [32]u8 = undefined;
     var input_len: usize = undefined;
 
+    // Encode input based on backend (pre-encoded format for executeWithInput)
     if (backend == .zisk) {
         // ZisK format: [8 bytes reserved][8 bytes size][data]
         @memset(input_bytes[0..8], 0); // Reserved zeros
         std.mem.writeInt(u64, input_bytes[8..16], 8, .little); // Size = 8 bytes
         std.mem.writeInt(u64, input_bytes[16..24], input_value, .little); // Data
         input_len = 24;
+    } else if (backend == .jolt) {
+        // Jolt format: [8 bytes size][data]
+        std.mem.writeInt(u64, input_bytes[0..8], 8, .little); // Size = 8 bytes
+        std.mem.writeInt(u64, input_bytes[8..16], input_value, .little); // Data
+        input_len = 16;
     } else {
         // Ligero format: [public_len:u64][public_data][private_len:u64][private_data]
         // For this example, all input is private
@@ -78,8 +85,8 @@ pub fn main() !void {
 
     std.debug.print("\nExecuting guest program...\n", .{});
 
-    // Execute the guest program
-    var result = rt.execute(input_bytes[0..input_len]) catch |err| {
+    // Execute using pre-encoded input
+    var result = rt.executeWithInput(input_bytes[0..input_len]) catch |err| {
         std.debug.print("Execution failed: {}\n", .{err});
         return err;
     };
@@ -91,15 +98,15 @@ pub fn main() !void {
         std.debug.print("Cycles: {d}\n", .{cycles});
     }
 
-    if (result.outputs.count > 0) {
+    if (result.output.count() > 0) {
         std.debug.print("Output values:\n", .{});
-        for (0..result.outputs.count) |i| {
-            std.debug.print("  [{d}] = {d}\n", .{ i, result.outputs.read(i) });
+        for (0..result.output.count()) |i| {
+            std.debug.print("  [{d}] = {d}\n", .{ i, result.output.read(i) });
         }
 
         // For double-input example, read as u64
-        if (result.outputs.count >= 2) {
-            const output_u64 = result.outputs.readU64(0);
+        if (result.output.count() >= 2) {
+            const output_u64 = result.output.readU64(0);
             std.debug.print("\nAs u64: {d}\n", .{output_u64});
         }
     } else {

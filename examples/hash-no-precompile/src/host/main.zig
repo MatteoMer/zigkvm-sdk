@@ -19,12 +19,20 @@ pub fn main() !void {
     const backend: runtime.Backend = switch (build_options.backend) {
         .zisk => .zisk,
         .ligero => .ligero,
+        .jolt => .jolt,
     };
+
+    // Check for --prove flag
+    var enable_proving = false;
+    for (args[1..]) |arg| {
+        if (std.mem.eql(u8, arg, "--prove")) enable_proving = true;
+    }
 
     // Initialize runtime with guest binary from build options
     var rt = try runtime.Runtime.init(allocator, .{
         .backend = backend,
         .guest_binary = build_options.guest_binary,
+        .enable_proving = enable_proving,
     });
     defer rt.deinit();
 
@@ -77,6 +85,15 @@ pub fn main() !void {
 
         std.debug.print("\nInput length: {d}\n", .{result.output.read(16)});
         std.debug.print("Iterations: {d}\n", .{result.output.read(17)});
+    }
+
+    if (enable_proving) {
+        std.debug.print("\nGenerating proof...\n", .{});
+        var proof_result = try rt.prove(null, private_bytes);
+        defer proof_result.deinit();
+        std.debug.print("Proof generated in {d}ms ({d} bytes)\n", .{ proof_result.proof_time_ms, proof_result.proof.data.len });
+        try proof_result.proof.toFile("proof.bin");
+        std.debug.print("Proof saved to proof.bin\n", .{});
     }
 }
 

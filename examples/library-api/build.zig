@@ -3,6 +3,7 @@ const std = @import("std");
 pub const Backend = enum {
     zisk,
     ligero,
+    jolt,
 };
 
 pub fn build(b: *std.Build) void {
@@ -10,7 +11,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // Backend selection option
-    const backend = b.option(Backend, "backend", "Runtime backend: zisk (default), ligero") orelse .zisk;
+    const backend = b.option(Backend, "backend", "Runtime backend: zisk (default), ligero, jolt") orelse .zisk;
 
     // Get the zigkvm-sdk dependency
     const zigkvm_dep = b.dependency("zigkvm", .{

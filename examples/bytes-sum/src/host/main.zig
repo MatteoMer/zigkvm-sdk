@@ -16,12 +16,20 @@ pub fn main() !void {
     const backend: runtime.Backend = switch (build_options.backend) {
         .zisk => .zisk,
         .ligero => .ligero,
+        .jolt => .jolt,
     };
+
+    // Check for --prove flag
+    var enable_proving = false;
+    for (args[1..]) |arg| {
+        if (std.mem.eql(u8, arg, "--prove")) enable_proving = true;
+    }
 
     // Initialize runtime with guest binary from build options
     var rt = try runtime.Runtime.init(allocator, .{
         .backend = backend,
         .guest_binary = build_options.guest_binary,
+        .enable_proving = enable_proving,
     });
     defer rt.deinit();
 
@@ -31,18 +39,19 @@ pub fn main() !void {
 
     var expected_sum: u64 = 0;
 
-    if (args.len > 1) {
-        // Use provided bytes as input
-        for (args[1..]) |arg| {
-            const byte = std.fmt.parseInt(u8, arg, 10) catch {
-                std.debug.print("Invalid byte value: {s}\n", .{arg});
-                std.debug.print("Usage: {s} [byte1 byte2 ...]\n", .{args[0]});
-                return;
-            };
-            try input.write(byte);
-            expected_sum += byte;
-        }
-    } else {
+    var has_byte_args = false;
+    for (args[1..]) |arg| {
+        if (std.mem.eql(u8, arg, "--prove")) continue;
+        has_byte_args = true;
+        const byte = std.fmt.parseInt(u8, arg, 10) catch {
+            std.debug.print("Invalid byte value: {s}\n", .{arg});
+            std.debug.print("Usage: {s} [--prove] [byte1 byte2 ...]\n", .{args[0]});
+            return;
+        };
+        try input.write(byte);
+        expected_sum += byte;
+    }
+    if (!has_byte_args) {
         // Default: use "hello" as input
         const default_input = "hello";
         try input.writeBytes(default_input);
@@ -76,6 +85,15 @@ pub fn main() !void {
         std.debug.print("Length: {d}\n", .{length});
     } else {
         std.debug.print("Output count: {d}\n", .{result.output.count()});
+    }
+
+    if (enable_proving) {
+        std.debug.print("\nGenerating proof...\n", .{});
+        var proof_result = try rt.prove(null, private_bytes);
+        defer proof_result.deinit();
+        std.debug.print("Proof generated in {d}ms ({d} bytes)\n", .{ proof_result.proof_time_ms, proof_result.proof.data.len });
+        try proof_result.proof.toFile("proof.bin");
+        std.debug.print("Proof saved to proof.bin\n", .{});
     }
 }
 
