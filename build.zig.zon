@@ -5,7 +5,8 @@
     .minimum_zig_version = "0.15.2",
     .dependencies = .{
         .zolt = .{
-            .path = "../zolt",
+            .url = "https://github.com/MatteoMer/zolt/archive/613ca2eed8eec0d3480a580cd13a40d910cde3cc.tar.gz",
+            .hash = "zolt-0.1.0-Hi1bVTvTOAAbvZ-TCqenuu4MW8rLKRrV_x4mwM-yRGrq",
         },
     },
     .paths = .{
